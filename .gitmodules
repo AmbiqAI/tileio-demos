@@ -1,0 +1,3 @@
+[submodule "neuralspot"]
+	path = neuralspot
+	url = https://github.com/AmbiqAI/neuralSPOT.git

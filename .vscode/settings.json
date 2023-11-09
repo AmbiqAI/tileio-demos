@@ -1,0 +1,15 @@
+{
+    "makefile.extensionOutputFolder": "./.vscode",
+    "files.associations": {
+    },
+    "makefile.makeDirectory": "./",
+    "makefile.launchConfigurations": [
+        {
+            "cwd": "${workspaceFolder}/evb/build",
+            "binaryPath": "${workspaceFolder}/evb/build/main.axf",
+            "binaryArgs": []
+        }
+    ],
+    "editor.tabSize": 4,
+    "files.trimTrailingWhitespace": true,
+}

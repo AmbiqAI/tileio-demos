@@ -1,0 +1,45 @@
+{
+    "name": "Python 3",
+    "image": "mcr.microsoft.com/devcontainers/python:1-3.11",
+
+    "features": {
+        "ghcr.io/devcontainers/features/git:1": {
+            "ppa": true,
+            "version": "latest"
+        },
+
+        "ghcr.io/devcontainers-contrib/features/pipenv:2": {
+            "version": "latest"
+        },
+        "ghcr.io/devcontainers-contrib/features/pipx-package:1": {
+            "package": "black",
+            "version": "latest",
+            "injections": "pylint pytest"
+        }
+    },
+
+    "customizations": {
+        "vscode": {
+            "extensions": [
+                "mcu-debug.debug-tracker-vscode",
+                "ms-vscode.cpptools",
+                "ms-vscode.cpptools-extension-pack",
+                "ms-vscode.makefile-tools",
+                "marus25.cortex-debug",
+            ]
+        }
+    },
+
+
+    "mounts": [
+    ],
+
+    "forwardPorts": [6006],
+
+    "postCreateCommand": "./.devcontainer/postCreateCommand.sh",
+    "containerEnv": {
+    },
+    "remoteEnv": {
+        "PATH": "${containerEnv:PATH}:/usr/local/arm-gnu-toolchain"
+    }
+}
