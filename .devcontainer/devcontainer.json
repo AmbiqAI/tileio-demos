@@ -1,20 +1,11 @@
 {
     "name": "Python 3",
-    "image": "mcr.microsoft.com/devcontainers/python:1-3.11",
+    "image": "mcr.microsoft.com/devcontainers/typescript-node:0-20",
 
     "features": {
         "ghcr.io/devcontainers/features/git:1": {
             "ppa": true,
             "version": "latest"
-        },
-
-        "ghcr.io/devcontainers-contrib/features/pipenv:2": {
-            "version": "latest"
-        },
-        "ghcr.io/devcontainers-contrib/features/pipx-package:1": {
-            "package": "black",
-            "version": "latest",
-            "injections": "pylint pytest"
         }
     },
 
@@ -29,7 +20,6 @@
             ]
         }
     },
-
 
     "mounts": [
     ],
