@@ -1,6 +1,8 @@
 {
     "makefile.extensionOutputFolder": "./.vscode",
     "files.associations": {
+        "ns_ambiqsuite_harness.h": "c",
+        "stimulus.h": "c"
     },
     "makefile.makeDirectory": "./",
     "makefile.launchConfigurations": [
