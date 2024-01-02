@@ -13,13 +13,30 @@
 
 #include "arm_math.h"
 
+/**
+ * @brief Metrics configuration
+ *
+ */
 typedef struct {
 } metrics_config_t;
 
+/**
+ * @brief Metrics ECG results
+ *
+ */
 typedef struct {
-    float32_t hr;
-    float32_t spo2;
-} __attribute__((packed)) metrics_results_t;
+    float32_t hr;  // Heart rate (bpm)
+} metrics_ecg_results_t;
+
+
+/**
+ * @brief Metrics PPG results
+ *
+ */
+typedef struct {
+    float32_t hr;  // Heart rate (bpm)
+    float32_t spo2;  // Blood oxygen saturation (%)
+} metrics_ppg_results_t;
 
 /**
  * @brief Initialize metrics
@@ -35,20 +52,19 @@ uint32_t
 metrics_capture_ppg(
     metrics_config_t *ctx,
     float32_t *ppg1,
-    uint8_t *ppg1Mask,
     float32_t *ppg2,
-    uint8_t *ppg2Mask,
+    uint16_t *ppgMask,
     size_t len,
-    metrics_results_t *results
+    metrics_ppg_results_t *results
 );
 
 uint32_t
 metrics_capture_ecg(
     metrics_config_t *ctx,
     float32_t *ecg,
-    uint8_t *ecgMask,
+    uint16_t *ecgMask,
     size_t len,
-    metrics_results_t *results
+    metrics_ecg_results_t *results
 );
 
 #endif // __PK_METRICS_H

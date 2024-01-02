@@ -23,34 +23,54 @@
 #include "physiokit/pk_ppg.h"
 // Locals
 #include "constants.h"
-#include "segmentation.h"
+#include "ecg_segmentation.h"
 #include "sensor.h"
 #include "metrics.h"
 #include "ringbuffer.h"
 
 typedef union {
     struct {
-        unsigned int btn0 : 1;
-        unsigned int btn1 : 1;
-        unsigned int btn2 : 1;
-        unsigned int led0 : 1;
-        unsigned int led1 : 1;
-        unsigned int led2 : 1;
-        unsigned int rsv0 : 1;
-        unsigned int rsv1 : 1;
+        uint8_t btn0;
+        uint8_t btn1;
+        uint8_t btn2;
+        uint8_t btn3;
+        uint8_t led0;
+        uint8_t led1;
+        uint8_t led2;
+        uint8_t led3;
     } __attribute__((packed));
-    uint8_t byte;
+    uint64_t bytes;
 } pk_uio_state_t;
+
 
 typedef struct {
     ns_ble_pool_config_t *pool;
     ns_ble_service_t *service;
-    ns_ble_characteristic_t *sigChar;
-    ns_ble_characteristic_t *metricsChar;
+
+    ns_ble_characteristic_t *slot0SigChar;
+    ns_ble_characteristic_t *slot1SigChar;
+    ns_ble_characteristic_t *slot2SigChar;
+    ns_ble_characteristic_t *slot3SigChar;
+
+    ns_ble_characteristic_t *slot0MetChar;
+    ns_ble_characteristic_t *slot1MetChar;
+    ns_ble_characteristic_t *slot2MetChar;
+    ns_ble_characteristic_t *slot3MetChar;
+
     ns_ble_characteristic_t *uioChar;
-    uint8_t *sigBuffer;
-    metrics_results_t *metricsResults;
-    uint8_t *uioBuffer;
+
+    void *slot0SigBuffer;
+    void *slot1SigBuffer;
+    void *slot2SigBuffer;
+    void *slot3SigBuffer;
+
+    void *slot0MetBuffer;
+    void *slot1MetBuffer;
+    void *slot2MetBuffer;
+    void *slot3MetBuffer;
+
+    void *uioBuffer;
+
 } pk_ble_context_t;
 
 enum HeartRhythm { HeartRhythmNormal, HeartRhythmAfib, HeartRhythmAfut };
@@ -81,9 +101,14 @@ extern pk_uio_state_t uioState;
 ///////////////////////////////////////////////////////////////////////////////
 
 extern sensor_context_t sensorCtx;
+extern rb_config_t rbEcgSensor;
 extern rb_config_t rbPpg1Sensor;
 extern rb_config_t rbPpg2Sensor;
-extern rb_config_t rbEcgSensor;
+
+
+///////////////////////////////////////////////////////////////////////////////
+// Preprocess Configuration
+///////////////////////////////////////////////////////////////////////////////
 
 extern arm_biquad_casd_df1_inst_f32 ecgFilterCtx;
 extern arm_biquad_casd_df1_inst_f32 ppg1FilterCtx;
@@ -91,58 +116,74 @@ extern arm_biquad_casd_df1_inst_f32 ppg2FilterCtx;
 
 
 ///////////////////////////////////////////////////////////////////////////////
-// Segmentation Configuration
+// ECG Segmentation Configuration
 ///////////////////////////////////////////////////////////////////////////////
-extern tf_model_context_t segModelCtx;
-extern float32_t segFilterBuffer[SEG_WINDOW_LEN];
-extern float32_t segInputs[SEG_WINDOW_LEN];
-extern uint8_t segMask[SEG_WINDOW_LEN];
 
+extern tf_model_context_t ecgSegModelCtx;
+extern float32_t ecgSegScratch[ECG_SEG_WINDOW_LEN];
+extern float32_t ecgSegInputs[ECG_SEG_WINDOW_LEN];
+extern uint16_t ecgSegMask[ECG_SEG_WINDOW_LEN];
 extern rb_config_t rbEcgSeg;
+
+
+///////////////////////////////////////////////////////////////////////////////
+// PPG Segmentation Configuration
+///////////////////////////////////////////////////////////////////////////////
+
+// extern tf_model_context_t ppgSegModelCtx;
+extern float32_t ppgSegScratch[PPG_SEG_WINDOW_LEN];
+extern float32_t ppgSegInputs[PPG_SEG_WINDOW_LEN];
+extern uint16_t ppgSegMask[PPG_SEG_WINDOW_LEN];
 extern rb_config_t rbPpg1Seg;
 extern rb_config_t rbPpg2Seg;
 
 
 ///////////////////////////////////////////////////////////////////////////////
-// Metrics Configuration
+// Shared Metrics Configuration
+///////////////////////////////////////////////////////////////////////////////
+
+extern metrics_config_t metricsCfg;
+extern uint32_t peaksMetrics[MAX_RR_PEAKS];
+extern uint32_t rriMetrics[MAX_RR_PEAKS];
+extern uint8_t rriMask[MAX_RR_PEAKS];
+
+
+///////////////////////////////////////////////////////////////////////////////
+// ECG Metrics Configuration
+///////////////////////////////////////////////////////////////////////////////
+
+extern rb_config_t rbEcgMet;
+extern rb_config_t rbEcgMaskMet;
+extern float32_t ecgMetData[ECG_MET_WINDOW_LEN];
+extern uint16_t ecgMaskMetData[ECG_MET_WINDOW_LEN];
+
+extern metrics_ecg_results_t ecgMetResults;
+
+///////////////////////////////////////////////////////////////////////////////
+// PPG Metrics Configuration
 ///////////////////////////////////////////////////////////////////////////////
 
 extern float32_t spo2Coefs[3];
-extern metrics_config_t metricsCfg;
-
-extern rb_config_t rbEcgMetrics;
-extern rb_config_t rbEcgMaskMetrics;
-extern rb_config_t rbPpg1Metrics;
-extern rb_config_t rbPpg1MaskMetrics;
-extern rb_config_t rbPpg2Metrics;
-extern rb_config_t rbPpg2MaskMetrics;
-
-extern float32_t ecgMetricsData[MET_WINDOW_LEN];
-extern float32_t ppg1MetricsData[MET_WINDOW_LEN];
-extern float32_t ppg2MetricsData[MET_WINDOW_LEN];
-extern uint8_t ecgMaskMetricsData[MET_WINDOW_LEN];
-extern uint8_t ppg1MaskMetricsData[MET_WINDOW_LEN];
-extern uint8_t ppg2MaskMetricsData[MET_WINDOW_LEN];
-
-extern uint8_t metricsMask[MET_BUF_LEN];
-extern uint32_t peaksMetrics[MAX_RR_PEAKS];
-extern uint32_t rriMetrics[MAX_RR_PEAKS];
-
+extern rb_config_t rbPpg1Met;
+extern rb_config_t rbPpg2Met;
+extern rb_config_t rbPpgMaskMet;
+extern float32_t ppg1MetData[PPG_MET_WINDOW_LEN];
+extern float32_t ppg2MetData[PPG_MET_WINDOW_LEN];
+extern uint16_t ppgMaskMetData[PPG_MET_WINDOW_LEN];
 extern ppg_peak_f32_t ppgFindPeakCtx;
-extern metrics_results_t metricsResults;
+
+extern metrics_ppg_results_t ppgMetResults;
 
 ///////////////////////////////////////////////////////////////////////////////
 // BLE Configuration
 ///////////////////////////////////////////////////////////////////////////////
 
 extern pk_ble_context_t bleCtx;
-
+extern rb_config_t rbEcgTx;
 extern rb_config_t rbPpg1Tx;
 extern rb_config_t rbPpg2Tx;
-extern rb_config_t rbEcgTx;
-extern rb_config_t rbPpg1MaskTx;
-extern rb_config_t rbPpg2MaskTx;
 extern rb_config_t rbEcgMaskTx;
+extern rb_config_t rbPpgMaskTx;
 
 
 ///////////////////////////////////////////////////////////////////////////////

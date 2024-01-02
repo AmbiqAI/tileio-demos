@@ -20,55 +20,43 @@
 #define MAX86150_ADDR (0x5E)
 #define LEDSTICK_ADDR (0x23)
 
+
 ///////////////////////////////////////////////////////////////////////////////
 // Sensor Configuration
 ///////////////////////////////////////////////////////////////////////////////
 
 #define SENSOR_RATE (200)
-#define SAMPLE_RATE (100)
-#define DOWNSAMPLE_RATE (SENSOR_RATE / SAMPLE_RATE)
 #define SENSOR_PPG1_SLOT (0)
 #define SENSOR_PPG2_SLOT (1)
 #define SENSOR_ECG_SLOT (2)
 #define SENSOR_BUF_LEN (2 * 32) // Double FIFO depth
 
-
 ///////////////////////////////////////////////////////////////////////////////
-// Segmentation Configuration
+// Preprocess Configuration
 ///////////////////////////////////////////////////////////////////////////////
 
-#define ECG_SOS_LEN (3)
-#define PPG_SOS_LEN (3)
 #define NORM_STD_EPS (0.1)
 
-#define SEG_MODEL_SIZE_KB (60)
-#define SEG_THRESHOLD (0.75)
-#define SEG_NUM_CLASS (2)
-#define SEG_WINDOW_LEN (250)
-#define SEG_PAD_LEN (25)
-#define SEG_VALID_LEN (SEG_WINDOW_LEN - 2 * SEG_PAD_LEN)
-#define SEG_BUF_LEN (2 * SEG_WINDOW_LEN)
+#define ECG_SOS_LEN (3)
+#define ECG_SAMPLE_RATE (100)
+#define ECG_DS_RATE (SENSOR_RATE / ECG_SAMPLE_RATE)
 
-// ECG Segmentation Mask
-// [1-0] : 2-bit segmentation (0:none, 1:p-wave, 2:qrs, 3:t-wave)
-// [2-3] : 2-bit fiducial (0:none, 1:p-peak, 2:qrs, 3:t-peak)
-// [4-5] : 2-bit QoS (0:bad, 1:poor, 2:fair, 3:good)
-// [6-7] : 2-bit beat type (0:none, 1:nsr, 2:pac/pvc, 3:noise)
+#define PPG_SOS_LEN (3)
+#define PPG_SAMPLE_RATE (50)
+#define PPG_DS_RATE (SENSOR_RATE / PPG_SAMPLE_RATE)
 
-// PPG Segmentation Mask
-// [1-0] : 2-bit segmentation (0:none, 1:systolic, 2:diastolic)
-// [2-3] : 2-bit fiducial (0:none, 1:s-peak, 2:d-peak, 3:d-notch)
-// [4-5] : 2-bit QoS (0:bad, 1:poor, 2:fair, 3:good)
-// [6-7] : 2-bit beat type (0:none, 1:nsr, 2:pac/pvc, 3:noise)
 
-#define SIG_MASK_SEG_OFFSET (0)
-#define SIG_MASK_FID_OFFSET (2)
-#define SIG_MASK_QOS_OFFSET (4)
-#define SIG_MASK_BEAT_OFFSET (6)
-#define SIG_MASK_SEG_MASK (0x3)
-#define SIG_MASK_FID_MASK (0x3)
-#define SIG_MASK_QOS_MASK (0x3)
-#define SIG_MASK_BEAT_MASK (0x3)
+///////////////////////////////////////////////////////////////////////////////
+// ECG Segmentation Configuration
+///////////////////////////////////////////////////////////////////////////////
+
+#define ECG_SEG_MODEL_SIZE_KB (60)
+#define ECG_SEG_THRESHOLD (0.75)
+#define ECG_SEG_NUM_CLASS (2)
+#define ECG_SEG_WINDOW_LEN (250)
+#define ECG_SEG_PAD_LEN (25)
+#define ECG_SEG_VALID_LEN (ECG_SEG_WINDOW_LEN - 2 * ECG_SEG_PAD_LEN)
+#define ECG_SEG_BUF_LEN (2 * ECG_SEG_WINDOW_LEN)
 
 // ECG Segmentation Classes
 #define ECG_SEG_NONE (0)
@@ -76,11 +64,38 @@
 #define ECG_SEG_QRS (1)
 #define ECG_SEG_TWAVE (3)
 
-// ECG Fiducial Classes
-#define ECG_FID_NONE (0)
-#define ECG_FID_PPEAK (3)
-#define ECG_FID_QRS (1)
-#define ECG_FID_TPEAK (3)
+///////////////////////////////////////////////////////////////////////////////
+// PPG Segmentation Configuration
+///////////////////////////////////////////////////////////////////////////////
+
+#define PPG_SEG_MODEL_SIZE_KB (0)
+#define PPG_SEG_THRESHOLD (0.5)
+#define PPG_SEG_NUM_CLASS (2)
+#define PPG_SEG_WINDOW_LEN (125)
+#define PPG_SEG_PAD_LEN (12)
+#define PPG_SEG_VALID_LEN (PPG_SEG_WINDOW_LEN - 2 * PPG_SEG_PAD_LEN)
+#define PPG_SEG_BUF_LEN (2 * PPG_SEG_WINDOW_LEN)
+
+// PPG Segmentation Classes
+#define PPG_SEG_NONE (0)
+#define PPG_SEG_SYS (1)
+#define PPG_SEG_DIA (2)
+
+
+///////////////////////////////////////////////////////////////////////////////
+// PK BLE Mask Format
+///////////////////////////////////////////////////////////////////////////////
+
+// [5-0] : 6-bit segmentation
+// [7-6] : 2-bit QoS (0:bad, 1:poor, 2:fair, 3:good)
+// [15-8] : 8-bit Fiducial
+
+#define SIG_MASK_SEG_OFFSET (0)
+#define SIG_MASK_SEG_MASK (0x3F)
+#define SIG_MASK_QOS_OFFSET (6)
+#define SIG_MASK_QOS_MASK (0x3)
+#define SIG_MASK_FID_OFFSET (8)
+#define SIG_MASK_FID_MASK (0xFF)
 
 // SIG QoS Classes
 #define SIG_QOS_BAD (0)
@@ -88,28 +103,71 @@
 #define SIG_QOS_FAIR (2)
 #define SIG_QOS_GOOD (3)
 
-// ECG Beat Classes
-#define ECG_BEAT_NONE (0)
-#define ECG_BEAT_NSR (1)
-#define ECG_BEAT_PNC (2)
-#define ECG_BEAT_NOISE (3)
+///////////////////////////////////////////////////////////////////////////////
+// PK BLE SLOT0 (ECG) Mask Format
+///////////////////////////////////////////////////////////////////////////////
 
-// PPG Segmentation Classes
-#define PPG_SEG_NONE (0)
-#define PPG_SEG_SYS (1)
-#define PPG_SEG_DIA (2)
+// ECG Mask
+// [5-0] : 6-bit segmentation (0:none, 1:p-wave, 2:qrs, 3:t-wave)
+// [7-6] : 2-bit QoS (0:bad, 1:poor, 2:fair, 3:good)
+// [9-8] : 2-bit fiducial (0:none, 1:p-peak, 2:qrs, 3:t-peak)
+// [15-10] : 6-bit beat type (0:none, 1:nsr, 2:pac/pvc, 3:noise)
 
-// PPG Fiducial Classes
-#define PPG_FID_NONE (0)
-#define PPG_FID_SPEAK (1)
-#define PPG_FID_DNOTCH (2)
-#define PPG_FID_DPEAK (3)
+#define ECG_MASK_SEG_OFFSET (0)
+#define ECG_MASK_SEG_MASK (0x3F)
+#define ECG_MASK_QOS_OFFSET (6)
+#define ECG_MASK_QOS_MASK (0x3)
 
-// PPG Beat Classes
-#define PPG_BEAT_NONE (0)
-#define PPG_BEAT_NSR (1)
-#define PPG_BEAT_PNC (2)
-#define PPG_BEAT_NOISE (3)
+#define ECG_MASK_FID_PEAK_OFFSET (8)
+#define ECG_MASK_FID_PEAK_MASK (0x3)
+#define ECG_MASK_FID_BEAT_OFFSET (10)
+#define ECG_MASK_FID_BEAT_MASK (0x3F)
+
+// ECG Fiducial Peak Classes
+#define ECG_FID_PEAK_NONE (0)
+#define ECG_FID_PEAK_PPEAK (3)
+#define ECG_FID_PEAK_QRS (1)
+#define ECG_FID_PEAK_TPEAK (3)
+
+// ECG Fiducial Beat Classes
+#define ECG_FID_BEAT_NONE (0)
+#define ECG_FID_BEAT_NSR (1)
+#define ECG_FID_BEAT_PNC (2)
+#define ECG_FID_BEAT_NOISE (3)
+
+
+///////////////////////////////////////////////////////////////////////////////
+// PK BLE SLOT0 (ECG) Mask Format
+///////////////////////////////////////////////////////////////////////////////
+
+// PPG Mask
+// [5-0] : 6-bit segmentation (0:none, 1:systolic, 2:diastolic)
+// [7-6] : 2-bit QoS (0:bad, 1:poor, 2:fair, 3:good)
+// [9-8] : 2-bit fiducial (0:none, 1:s-peak, 2:d-peak, 3:d-notch)
+// [15-10] : 6-bit beat type (0:none, 1:nsr, 2:pac/pvc, 3:noise)
+
+#define PPG_MASK_SEG_OFFSET (0)
+#define PPG_MASK_SEG_MASK (0x3F)
+#define PPG_MASK_QOS_OFFSET (6)
+#define PPG_MASK_QOS_MASK (0x3)
+
+#define PPG_MASK_FID_PEAK_OFFSET (8)
+#define PPG_MASK_FID_PEAK_MASK (0x3)
+#define PPG_MASK_FID_BEAT_OFFSET (10)
+#define PPG_MASK_FID_BEAT_MASK (0x3F)
+
+// PPG Fiducial Peak Classes
+#define PPG_FID_PEAK_NONE (0)
+#define PPG_FID_PEAK_SPEAK (1)
+#define PPG_FID_PEAK_DNOTCH (2)
+#define PPG_FID_PEAK_DPEAK (3)
+
+// PPG Fiducial Beat Classes
+#define PPG_FID_BEAT_NONE (0)
+#define PPG_FID_BEAT_NSR (1)
+#define PPG_FID_BEAT_PNC (2)
+#define PPG_FID_BEAT_NOISE (3)
+
 
 ///////////////////////////////////////////////////////////////////////////////
 // Metrics Configuration
@@ -120,41 +178,53 @@
 #define MIN_RR_DELTA (0.3)
 #define MET_CAPTURE_SEC (5)
 #define MAX_RR_PEAKS (100 * MET_CAPTURE_SEC)
-#define MET_WINDOW_LEN (MET_CAPTURE_SEC * SAMPLE_RATE)
-#define MET_PAD_LEN (50)
-#define MET_VALID_LEN (MET_WINDOW_LEN - 2 * MET_PAD_LEN)
-// #define MET_VALID_LEN (250)
-#define MET_BUF_LEN (2 * MET_WINDOW_LEN)
-#define MET_PPG_MIN_VAL (80000)
+
+#define ECG_MET_WINDOW_LEN (MET_CAPTURE_SEC * ECG_SAMPLE_RATE)
+#define ECG_MET_PAD_LEN (50)
+#define ECG_MET_VALID_LEN (ECG_MET_WINDOW_LEN - 2 * ECG_MET_PAD_LEN)
+#define ECG_MET_BUF_LEN (2 * ECG_MET_WINDOW_LEN)
+
+#define PPG_MET_WINDOW_LEN (MET_CAPTURE_SEC * PPG_SAMPLE_RATE)
+#define PPG_MET_PAD_LEN (25)
+#define PPG_MET_VALID_LEN (PPG_MET_WINDOW_LEN - 2 * PPG_MET_PAD_LEN)
+#define PPG_MET_BUF_LEN (2 * PPG_MET_WINDOW_LEN)
+
+#define PPG_MET_MIN_VAL (80000)
 
 ///////////////////////////////////////////////////////////////////////////////
 // BLE Configuration
 ///////////////////////////////////////////////////////////////////////////////
 
-#define BLE_NUM_CHARS (3)
-#define BLE_SIG_OBJ_BYTE_LEN (9)
-#define BLE_SIG_NUM_OBJ (25)
-#define BLE_SIG_ECG_OFFSET (0)
-#define BLE_SIG_PPG1_OFFSET (2)
-#define BLE_SIG_PPG2_OFFSET (4)
-#define BLE_ECG_SCALE (1000)
-#define BLE_PPG_SCALE (1000)
-#define BLE_SIG_ECG_MASK_OFFSET (6)
-#define BLE_SIG_PPG1_MASK_OFFSET (7)
-#define BLE_SIG_PPG2_MASK_OFFSET (8)
+#define BLE_SLOT_SIG_BUF_LEN (242)
+#define BLE_SLOT_MET_BUF_LEN (242)
+#define BLE_UIO_BUF_LEN (64)
 
-#define BLE_SIG_BUF_LEN (BLE_SIG_NUM_OBJ * BLE_SIG_OBJ_BYTE_LEN)
-#define BLE_SIG_SAMPLE_RATE (SAMPLE_RATE / BLE_SIG_NUM_OBJ)
-#define PK_DEV_SVC_UUID "f2a8eb8944724ca899033f3238955bf5"
-#define PK_DEV_NAME_CHAR_UUID "d1ba1b6144704e4b8ac767dce77c760a"
-#define PK_DEV_LOC_CHAR_UUID "523133b72bdb49a0b82d884742d79641"
-#define PK_SIG_SVC_UUID "eecb7db88b2d402cb995825538b49328"
-#define PK_SIG_CHAR_UUID "3f2c190835ba49e6bdf1d8c73625dead"
-#define PK_MET_SVC_UUID "995b00cb47674ed59184f3f93929e31f"
-#define PK_MET_CHAR_UUID "529cb6e342d74ad691387da2e614721e"
+#define PK_SLOT_SVC_UUID "eecb7db88b2d402cb995825538b49328"
+#define PK_SLOT0_SIG_CHAR_UUID "5bca2754ac7e4a27a1270f328791057a"
+#define PK_SLOT1_SIG_CHAR_UUID "45415793a0e94740bca4ce90bd61839f"
+#define PK_SLOT2_SIG_CHAR_UUID "dd19792c63f1420f920cc58bada8efb9"
+#define PK_SLOT3_SIG_CHAR_UUID "f1f691580bd64cab90a8528baf74cc74"
+
+#define PK_SLOT0_MET_CHAR_UUID "44a3a7b8d7c849329a10d99dd63775ae"
+#define PK_SLOT1_MET_CHAR_UUID "e64fa683462848c5bede824aaa7c3f5b"
+#define PK_SLOT2_MET_CHAR_UUID "b9d28f5365f04392afbcc602f9dc3c8b"
+#define PK_SLOT3_MET_CHAR_UUID "917c9eb43dbc4cb3bba2ec4e288083f4"
+
 #define PK_UIO_CHAR_UUID "b9488d48069b47f794f0387f7fbfd1fa"
 
-#define BLE_BUF_LEN (MET_BUF_LEN)
+
+#define BLE_NUM_CHARS (2+2+1)
+
+#define BLE_SLOT0_NUM_CH (1)
+#define BLE_SLOT0_SIG_NUM_VALS (50)
+#define BLE_SLOT0_FS (ECG_SAMPLE_RATE / BLE_SLOT0_SIG_NUM_VALS)
+#define BLE_SLOT0_SCALE (1000)
+
+#define BLE_SLOT1_NUM_CH (2)
+#define BLE_SLOT1_SIG_NUM_VALS (25)
+#define BLE_SLOT1_FS (PPG_SAMPLE_RATE / BLE_SLOT1_SIG_NUM_VALS)
+#define BLE_SLOT1_SCALE (1000)
+
 
 // WSF buffer pools are a bit of black magic. More development needed.
 #define WEBBLE_WSF_BUFFER_POOLS 4

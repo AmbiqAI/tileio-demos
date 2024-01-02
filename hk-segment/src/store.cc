@@ -11,8 +11,8 @@
 #include "physiokit/pk_ppg.h"
 // Local
 #include "constants.h"
-#include "segmentation.h"
-#include "segmentation_flatbuffer.h"
+#include "ecg_segmentation.h"
+#include "ecg_segmentation_flatbuffer.h"
 #include "store.h"
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -38,11 +38,11 @@ pk_uio_state_t uioState = {
     .btn0 = false,
     .btn1 = false,
     .btn2 = false,
+    .btn3 = false,
     .led0 = false,
     .led1 = false,
     .led2 = false,
-    .rsv0 = false,
-    .rsv1 = false,
+    .led3 = false,
 };
 
 static int volatile btn0Pressed = false;
@@ -62,6 +62,12 @@ ns_core_config_t nsCoreCfg = {
 ns_i2c_config_t nsI2cCfg = {
     .api = &ns_i2c_V1_0_0,
     .iom = I2C_IOM
+};
+
+ns_timer_config_t tickTimerCfg = {
+    .api = &ns_timer_V1_0_0,
+    .timer = NS_TIMER_COUNTER,
+    .enableInterrupt = false,
 };
 
 
@@ -150,6 +156,11 @@ rb_config_t rbPpg2Sensor = {
     .tail = 0,
 };
 
+
+///////////////////////////////////////////////////////////////////////////////
+// Preprocess Configuration
+///////////////////////////////////////////////////////////////////////////////
+
 // print(pk.signal.generate_arm_biquad_sos(0.5, 30, 100, order=3, var_name="ecgSos"))
 static float32_t ecgSosState[4 * ECG_SOS_LEN] = {0};
 static float32_t ecgSos[5 * ECG_SOS_LEN] = {
@@ -161,7 +172,7 @@ arm_biquad_casd_df1_inst_f32 ecgFilterCtx = {.numStages = ECG_SOS_LEN, .pState =
 
 static float32_t ppg1SosState[4 * PPG_SOS_LEN] = {0};
 static float32_t ppg2SosState[4 * PPG_SOS_LEN] = {0};
-// print(pk.signal.generate_arm_biquad_sos(0.5, 4, 100, order=3, var_name='ppgSos'))
+// print(pk.signal.generate_arm_biquad_sos(0.5, 4, 50, order=3, var_name='ppgSos'))
 static float32_t ppgSos[5 * PPG_SOS_LEN] = {
    0.0010794898220693148, 0.0021589796441386297, 0.0010794898220693148, 1.7720892400740829, -0.8247887959007985,
    1.0, 0.0, -1.0, 1.7940163154176096, -0.8011510705587511,
@@ -178,155 +189,150 @@ arm_biquad_casd_df1_inst_f32 ppg2FilterCtx = {.numStages = PPG_SOS_LEN, .pState 
 
 
 ///////////////////////////////////////////////////////////////////////////////
-// Segmentation Configuration
+// ECG Segmentation Configuration
 ///////////////////////////////////////////////////////////////////////////////
 
-static constexpr int segTensorArenaSize = 1024 * SEG_MODEL_SIZE_KB;
+float32_t ecgSegScratch[ECG_SEG_WINDOW_LEN];
+float32_t ecgSegInputs[ECG_SEG_WINDOW_LEN];
+uint16_t ecgSegMask[ECG_SEG_WINDOW_LEN];
+
+static constexpr int segTensorArenaSize = 1024 * ECG_SEG_MODEL_SIZE_KB;
 alignas(16) static uint8_t segTensorArena[segTensorArenaSize];
-tf_model_context_t segModelCtx = {
+tf_model_context_t ecgSegModelCtx = {
     .arenaSize = segTensorArenaSize,
     .arena = segTensorArena,
-    .buffer = segmentation_flatbuffer,
+    .buffer = ecg_segmentation_flatbuffer,
     .model = nullptr,
     .input = nullptr,
     .output = nullptr,
     .interpreter = nullptr,
 };
-float32_t segFilterBuffer[SEG_WINDOW_LEN];
-float32_t segInputs[SEG_WINDOW_LEN];
-uint8_t segMask[SEG_WINDOW_LEN];
 
-static float32_t ecgSegBuffer[SEG_BUF_LEN];
+static float32_t ecgSegBuffer[ECG_SEG_BUF_LEN];
 rb_config_t rbEcgSeg = {
     .buffer = (void *)ecgSegBuffer,
     .dlen = sizeof(float32_t),
-    .size = SEG_BUF_LEN,
-    .head = 0,
-    .tail = 0,
-};
-
-static float32_t ppg1SegBuffer[SEG_BUF_LEN];
-rb_config_t rbPpg1Seg = {
-    .buffer = (void *) ppg1SegBuffer,
-    .dlen = sizeof(float32_t),
-    .size = SEG_BUF_LEN,
-    .head = 0,
-    .tail = 0,
-};
-
-static float32_t ppg2SegBuffer[SEG_BUF_LEN];
-rb_config_t rbPpg2Seg = {
-    .buffer = (void *) ppg2SegBuffer,
-    .dlen = sizeof(float32_t),
-    .size = SEG_BUF_LEN,
+    .size = ECG_SEG_BUF_LEN,
     .head = 0,
     .tail = 0,
 };
 
 
 ///////////////////////////////////////////////////////////////////////////////
-// Metrics Configuration
+// PPG Segmentation Configuration
+///////////////////////////////////////////////////////////////////////////////
+
+float32_t ppgSegScratch[PPG_SEG_WINDOW_LEN];
+float32_t ppgSegInputs[PPG_SEG_WINDOW_LEN];
+uint16_t ppgSegMask[PPG_SEG_WINDOW_LEN];
+
+static float32_t ppg1SegBuffer[PPG_SEG_BUF_LEN];
+rb_config_t rbPpg1Seg = {
+    .buffer = (void *) ppg1SegBuffer,
+    .dlen = sizeof(float32_t),
+    .size = PPG_SEG_BUF_LEN,
+    .head = 0,
+    .tail = 0,
+};
+
+static float32_t ppg2SegBuffer[PPG_SEG_BUF_LEN];
+rb_config_t rbPpg2Seg = {
+    .buffer = (void *) ppg2SegBuffer,
+    .dlen = sizeof(float32_t),
+    .size = PPG_SEG_BUF_LEN,
+    .head = 0,
+    .tail = 0,
+};
+
+///////////////////////////////////////////////////////////////////////////////
+// Shared Metrics Configuration
 ///////////////////////////////////////////////////////////////////////////////
 
 metrics_config_t metricsCfg = {
 };
 
-static float32_t ecgMetricsRBuffer[MET_BUF_LEN];
-rb_config_t rbEcgMetrics = {
-    .buffer = (void *)ecgMetricsRBuffer,
-    .dlen = sizeof(float32_t),
-    .size = MET_BUF_LEN,
-    .head = 0,
-    .tail = 0,
-};
-
-static uint8_t ecgMaskMetricsRBuffer[MET_BUF_LEN];
-rb_config_t rbEcgMaskMetrics = {
-    .buffer = (void *)ecgMaskMetricsRBuffer,
-    .dlen = sizeof(uint8_t),
-    .size = MET_BUF_LEN,
-    .head = 0,
-    .tail = 0,
-};
-
-static float32_t ppg1MetricsRBuffer[MET_BUF_LEN];
-rb_config_t rbPpg1Metrics = {
-    .buffer = (void *)ppg1MetricsRBuffer,
-    .dlen = sizeof(float32_t),
-    .size = MET_BUF_LEN,
-    .head = 0,
-    .tail = 0,
-};
-
-static uint8_t ppg1MaskMetricsRBuffer[MET_BUF_LEN];
-rb_config_t rbPpg1MaskMetrics = {
-    .buffer = (void *)ppg1MaskMetricsRBuffer,
-    .dlen = sizeof(uint8_t),
-    .size = MET_BUF_LEN,
-    .head = 0,
-    .tail = 0,
-};
-
-static float32_t ppg2MetricsRBuffer[MET_BUF_LEN];
-rb_config_t rbPpg2Metrics = {
-    .buffer = (void *)ppg2MetricsRBuffer,
-    .dlen = sizeof(float32_t),
-    .size = MET_BUF_LEN,
-    .head = 0,
-    .tail = 0,
-};
-
-static uint8_t ppg2MaskMetricsRBuffer[MET_BUF_LEN];
-rb_config_t rbPpg2MaskMetrics = {
-    .buffer = (void *)ppg2MaskMetricsRBuffer,
-    .dlen = sizeof(uint8_t),
-    .size = MET_BUF_LEN,
-    .head = 0,
-    .tail = 0,
-};
-
-float32_t ecgMetricsData[MET_WINDOW_LEN];
-float32_t ppg1MetricsData[MET_WINDOW_LEN];
-float32_t ppg2MetricsData[MET_WINDOW_LEN];
-uint8_t ecgMaskMetricsData[MET_WINDOW_LEN];
-uint8_t ppg1MaskMetricsData[MET_WINDOW_LEN];
-uint8_t ppg2MaskMetricsData[MET_WINDOW_LEN];
-
-uint8_t metricsMask[MET_BUF_LEN];
 uint32_t peaksMetrics[MAX_RR_PEAKS];
 uint32_t rriMetrics[MAX_RR_PEAKS];
+uint8_t rriMask[MAX_RR_PEAKS];
 
-// float32_t spo2Coefs[3] = {-16.666666, 8.333333, 100};
+///////////////////////////////////////////////////////////////////////////////
+// ECG Metrics Configuration
+///////////////////////////////////////////////////////////////////////////////
+
+static float32_t ecgMetRBuffer[ECG_MET_BUF_LEN];
+rb_config_t rbEcgMet = {
+    .buffer = (void *)ecgMetRBuffer,
+    .dlen = sizeof(float32_t),
+    .size = ECG_MET_BUF_LEN,
+    .head = 0,
+    .tail = 0,
+};
+
+static uint16_t ecgMaskMetRBuffer[ECG_MET_BUF_LEN];
+rb_config_t rbEcgMaskMet = {
+    .buffer = (void *)ecgMaskMetRBuffer,
+    .dlen = sizeof(uint16_t),
+    .size = ECG_MET_BUF_LEN,
+    .head = 0,
+    .tail = 0,
+};
+
+float32_t ecgMetData[ECG_MET_WINDOW_LEN];
+uint16_t ecgMaskMetData[ECG_MET_WINDOW_LEN];
+
+// static hrv_td_metrics_t ecgHrv;
+metrics_ecg_results_t ecgMetResults;
+
+///////////////////////////////////////////////////////////////////////////////
+// PPG Metrics Configuration
+///////////////////////////////////////////////////////////////////////////////
+
+static float32_t ppg1MetRBuffer[PPG_MET_BUF_LEN];
+rb_config_t rbPpg1Met = {
+    .buffer = (void *)ppg1MetRBuffer,
+    .dlen = sizeof(float32_t),
+    .size = PPG_MET_BUF_LEN,
+    .head = 0,
+    .tail = 0,
+};
+
+static float32_t ppg2MetRBuffer[PPG_MET_BUF_LEN];
+rb_config_t rbPpg2Met = {
+    .buffer = (void *)ppg2MetRBuffer,
+    .dlen = sizeof(float32_t),
+    .size = PPG_MET_BUF_LEN,
+    .head = 0,
+    .tail = 0,
+};
+
+static uint16_t ppgMaskMetRBuffer[PPG_MET_BUF_LEN];
+rb_config_t rbPpgMaskMet = {
+    .buffer = (void *)ppgMaskMetRBuffer,
+    .dlen = sizeof(uint16_t),
+    .size = PPG_MET_BUF_LEN,
+    .head = 0,
+    .tail = 0,
+};
+
+float32_t ppg1MetData[PPG_MET_WINDOW_LEN];
+float32_t ppg2MetData[PPG_MET_WINDOW_LEN];
+uint16_t ppgMaskMetData[PPG_MET_WINDOW_LEN];
+
 float32_t spo2Coefs[3] = {-16.666666, 8.333333, 100};
+// float32_t spo2Coefs[3] = {-16.666666, 8.333333, 100};
 // float32_t spo2Coefs[3] = {1.5958422, -34.6596622, 112.6898759};
 
-static hrv_td_metrics_t ecgHrv;
-
-static float32_t pkArena[5*MET_BUF_LEN];
+static float32_t pkArena[5*PPG_MET_BUF_LEN];
 ppg_peak_f32_t ppgFindPeakCtx = {
     .peakWin=0.111,
     .beatWin=0.666,
     .beatOffset=0.333,
     .peakDelayWin=0.3,
-    .sampleRate=SAMPLE_RATE,
+    .sampleRate=PPG_SAMPLE_RATE,
     .state=pkArena
 };
 
-static ecg_peak_f32_t qrsFindPeakCtx = {
-    .qrsWin=0.1,
-    .avgWin=1.0,
-    .qrsPromWeight=1.5,
-    .qrsMinLenWeight=0.4,
-    .qrsDelayWin=0.3,
-    .sampleRate=SAMPLE_RATE,
-    .state=pkArena
-};
-
-metrics_results_t metricsResults = {
-    .hr = 0,
-    .spo2 = 0
-};
-
+metrics_ppg_results_t ppgMetResults;
 
 ///////////////////////////////////////////////////////////////////////////////
 // BLE Configuration
@@ -345,76 +351,87 @@ static ns_ble_pool_config_t bleWsfBuffers = {
     .desc = webbleBufferDescriptors,
     .descNum = WEBBLE_WSF_BUFFER_POOLS
 };
-static uint8_t bleSigBuffer[BLE_SIG_BUF_LEN] = {0};
-static uint8_t bleUioBuffer[1] = {0};
+static uint8_t bleSlot0SigBuffer[BLE_SLOT_SIG_BUF_LEN] = {0};
+static uint8_t bleSlot1SigBuffer[BLE_SLOT_SIG_BUF_LEN] = {0};
+
+static uint8_t bleSlot0MetBuffer[BLE_SLOT_MET_BUF_LEN] = {0};
+static uint8_t bleSlot1MetBuffer[BLE_SLOT_MET_BUF_LEN] = {0};
+
+static uint8_t bleUioBuffer[BLE_UIO_BUF_LEN] = {0};
 
 static ns_ble_service_t bleService;
-static ns_ble_characteristic_t bleSigChar;
-static ns_ble_characteristic_t bleMetricsChar;
+static ns_ble_characteristic_t bleSlot0SigChar;
+static ns_ble_characteristic_t bleSlot1SigChar;
+static ns_ble_characteristic_t bleSlot0MetChar;
+static ns_ble_characteristic_t bleSlot1MetChar;
+
 static ns_ble_characteristic_t bleUioChar;
 
 pk_ble_context_t bleCtx = {
     .pool = &bleWsfBuffers,
     .service = &bleService,
-    .sigChar = &bleSigChar,
-    .metricsChar = &bleMetricsChar,
+    .slot0SigChar = &bleSlot0SigChar,
+    .slot1SigChar = &bleSlot0SigChar,
+    .slot2SigChar = nullptr,
+    .slot3SigChar = nullptr,
+    .slot0MetChar = &bleSlot0MetChar,
+    .slot1MetChar = &bleSlot1MetChar,
+    .slot2MetChar = nullptr,
+    .slot3MetChar = nullptr,
     .uioChar = &bleUioChar,
-    .sigBuffer = bleSigBuffer,
-    .metricsResults = &metricsResults,
-    .uioBuffer = &uioState.byte
+    .slot0SigBuffer = bleSlot0SigBuffer,
+    .slot1SigBuffer = bleSlot1SigBuffer,
+    .slot2SigBuffer = nullptr,
+    .slot3SigBuffer = nullptr,
+    .slot0MetBuffer = bleSlot0MetBuffer,
+    .slot1MetBuffer = bleSlot1MetBuffer,
+    .slot2MetBuffer = nullptr,
+    .slot3MetBuffer = nullptr,
+    .uioBuffer = (uint8_t *)&uioState.bytes
 };
 
 
-static float32_t ecgTxBuffer[BLE_BUF_LEN];
+static float32_t ecgTxBuffer[ECG_MET_BUF_LEN];
 rb_config_t rbEcgTx = {
     .buffer = (void *)ecgTxBuffer,
     .dlen = sizeof(float32_t),
-    .size = BLE_BUF_LEN,
+    .size = ECG_MET_BUF_LEN,
     .head = 0,
     .tail = 0,
 };
 
-static uint8_t ecgMaskTxBuffer[BLE_BUF_LEN];
+static uint16_t ecgMaskTxBuffer[ECG_MET_BUF_LEN];
 rb_config_t rbEcgMaskTx = {
     .buffer = (void *)ecgMaskTxBuffer,
-    .dlen = sizeof(uint8_t),
-    .size = BLE_BUF_LEN,
+    .dlen = sizeof(uint16_t),
+    .size = ECG_MET_BUF_LEN,
     .head = 0,
     .tail = 0,
 };
 
-static float32_t ppg1TxBuffer[BLE_BUF_LEN];
+static float32_t ppg1TxBuffer[PPG_MET_BUF_LEN];
 rb_config_t rbPpg1Tx = {
     .buffer = (void *)ppg1TxBuffer,
     .dlen = sizeof(float32_t),
-    .size = BLE_BUF_LEN,
+    .size = PPG_MET_BUF_LEN,
     .head = 0,
     .tail = 0,
 };
 
-static uint8_t ppg1MaskTxBuffer[BLE_BUF_LEN];
-rb_config_t rbPpg1MaskTx = {
-    .buffer = (void *)ppg1MaskTxBuffer,
-    .dlen = sizeof(uint8_t),
-    .size = BLE_BUF_LEN,
-    .head = 0,
-    .tail = 0,
-};
-
-static float32_t ppg2TxBuffer[BLE_BUF_LEN];
+static float32_t ppg2TxBuffer[PPG_MET_BUF_LEN];
 rb_config_t rbPpg2Tx = {
     .buffer = (void *)ppg2TxBuffer,
     .dlen = sizeof(float32_t),
-    .size = BLE_BUF_LEN,
+    .size = PPG_MET_BUF_LEN,
     .head = 0,
     .tail = 0,
 };
 
-static uint8_t ppg2MaskTxBuffer[BLE_BUF_LEN];
-rb_config_t rbPpg2MaskTx = {
-    .buffer = (void *)ppg2MaskTxBuffer,
-    .dlen = sizeof(uint8_t),
-    .size = BLE_BUF_LEN,
+static uint16_t ppgMaskTxBuffer[PPG_MET_BUF_LEN];
+rb_config_t rbPpgMaskTx = {
+    .buffer = (void *)ppgMaskTxBuffer,
+    .dlen = sizeof(uint16_t),
+    .size = PPG_MET_BUF_LEN,
     .head = 0,
     .tail = 0,
 };
@@ -436,13 +453,3 @@ rb_config_t rbPpg2MaskTx = {
 //     {8, 207,   0, 193},
 //     {9, 207,   0, 193},
 // };
-
-///////////////////////////////////////////////////////////////////////////////
-// APP Configuration
-///////////////////////////////////////////////////////////////////////////////
-
-ns_timer_config_t tickTimerCfg = {
-    .api = &ns_timer_V1_0_0,
-    .timer = NS_TIMER_COUNTER,
-    .enableInterrupt = false,
-};

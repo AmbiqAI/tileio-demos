@@ -2,13 +2,14 @@
     "makefile.extensionOutputFolder": "./.vscode",
     "files.associations": {
         "ns_ambiqsuite_harness.h": "c",
-        "stimulus.h": "c"
+        "stimulus.h": "c",
+        "stack": "cpp"
     },
     "makefile.makeDirectory": "./",
     "makefile.launchConfigurations": [
         {
-            "cwd": "${workspaceFolder}/evb/build",
-            "binaryPath": "${workspaceFolder}/evb/build/main.axf",
+            "cwd": "${workspaceFolder}/hk-segment/build",
+            "binaryPath": "${workspaceFolder}/hk-segment/build/main.axf",
             "binaryArgs": []
         }
     ],

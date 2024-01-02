@@ -73,7 +73,7 @@ pk_ppg_find_peaks_f32(ppg_peak_f32_t* ctx, float32_t *ppg, uint32_t ppgLen, uint
         if (m != -1 && n != -1)
         {
             peakLen = n - m + 1;
-            arm_max_f32(&ppg[m], peakLen, &peakVal, &peak);
+            arm_max_f32(&sqrd[m], peakLen, &peakVal, &peak);
             peak += m;
             peakDelay = numPeaks > 0 ? peak - peaks[numPeaks - 1] : minPeakDelay;
             if (peakLen >= minPeakWidth && peakDelay >= minPeakDelay)
@@ -130,7 +130,8 @@ pk_ppg_compute_heart_rate_from_rr_intervals(uint32_t *rrIntervals, uint32_t *mas
     float32_t heartRate = 0;
     uint32_t numValid = 0;
     for (size_t i = 0; i < numPeaks; i++)
-    {   if (mask[i] == 0) {
+    {
+        if (mask[i] == 0) {
             heartRate += (float32_t)sampleRate/rrIntervals[i];
             numValid++;
         }

@@ -3,10 +3,10 @@
     "tasks": [
         {
             "type": "shell",
-            "label": "Build EVB",
+            "label": "Build Demo",
             "command": "make",
             "options": {
-                "cwd": "${workspaceFolder}/evb",
+                "cwd": "${workspaceFolder}/hk-segment",
             },
             "group": {
                 "kind": "build",
@@ -19,10 +19,10 @@
         },
         {
             "type": "shell",
-            "label": "Clean EVB",
+            "label": "Clean Demo",
             "command": "make clean",
             "options": {
-                "cwd": "${workspaceFolder}/evb"
+                "cwd": "${workspaceFolder}/hk-segment"
             },
             "group": {
                 "kind": "build",

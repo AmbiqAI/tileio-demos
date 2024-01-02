@@ -1,5 +1,5 @@
 /**
- * @file segmentation.cc
+ * @file ecg_segmentation.cc
  * @author Adam Page (adam.page@ambiq.com)
  * @brief TFLM ECG segmentation
  * @version 1.0
@@ -27,7 +27,7 @@
 #include "physiokit/pk_ecg.h"
 #include "store.h"
 #include "constants.h"
-#include "segmentation.h"
+#include "ecg_segmentation.h"
 
 
 static tflite::ErrorReporter *errorReporter = nullptr;
@@ -35,7 +35,7 @@ static tflite::MicroMutableOpResolver<113> *opResolver = nullptr;
 static tflite::MicroProfiler *profiler = nullptr;
 
 uint32_t
-segmentation_init(tf_model_context_t *ctx) {
+ecg_segmentation_init(tf_model_context_t *ctx) {
 
     size_t bytesUsed;
     TfLiteStatus allocateStatus;
@@ -195,7 +195,7 @@ segmentation_init(tf_model_context_t *ctx) {
 }
 
 uint32_t
-segmentation_inference(tf_model_context_t *ctx, float32_t *data, uint8_t *segMask, uint32_t padLen, float32_t threshold) {
+ecg_segmentation_inference(tf_model_context_t *ctx, float32_t *data, uint16_t *segMask, uint32_t padLen, float32_t threshold) {
     uint32_t yIdx = 0;
     uint8_t yMaxIdx = 0;
     float32_t yVal = 0;
@@ -204,7 +204,7 @@ segmentation_inference(tf_model_context_t *ctx, float32_t *data, uint8_t *segMas
     float32_t avgQos = 0;
 
     // Copy data to input
-    for (size_t i = 0; i < SEG_WINDOW_LEN; i++) {
+    for (size_t i = 0; i < ECG_SEG_WINDOW_LEN; i++) {
         if (ctx->input->quantization.type == kTfLiteAffineQuantization) {
             ctx->input->data.int8[i] = data[i] / ctx->input->params.scale + ctx->input->params.zero_point;
         } else {
@@ -246,23 +246,24 @@ segmentation_inference(tf_model_context_t *ctx, float32_t *data, uint8_t *segMas
     // TODO: Fix gaps in segmentation
 
     // Extract fiducial points
-    uint8_t prevVal = segMask[0] & SIG_MASK_SEG_MASK;
+    uint8_t prevSegVal = segMask[0] & SIG_MASK_SEG_MASK;
     uint8_t segVal = 0;
     int startIdx = 0;
     float32_t maxVal = abs(data[0]);
     int maxIdx = 0;
-    for (size_t i = 1; i < SEG_WINDOW_LEN; i++) {
+    for (size_t i = 1; i < ECG_SEG_WINDOW_LEN; i++) {
         // If start of segment, reset max
         segVal = segMask[i] & SIG_MASK_SEG_MASK;
-        if ((segVal != 0) && (prevVal == 0)) {
+        if ((segVal != 0) && (prevSegVal == 0)) {
             startIdx = i;
             maxVal = abs(data[i]);
             maxIdx = i;
         }
         // If end of segment, mark fiducial
-        else if ((segVal == 0) && (prevVal != 0)) {
+        else if ((segVal == 0) && (prevSegVal != 0)) {
             if (startIdx >= 0 && (i - startIdx > 2)) {
-                segMask[maxIdx] |= ((segMask[maxIdx] & SIG_MASK_SEG_MASK) << SIG_MASK_FID_OFFSET);
+                // Fiducial peak value (e.g p-peak) will be same as segmentation value (e.g. p-wave)
+                segMask[maxIdx] |= (prevSegVal << ECG_MASK_FID_PEAK_OFFSET);
                 ns_lp_printf("Segment (%d, %d, %d): Fiducial (%d, %f)\n", segMask[maxIdx] & 0x0F, startIdx, i, maxIdx, maxVal);
             }
             startIdx = -1;
@@ -272,7 +273,7 @@ segmentation_inference(tf_model_context_t *ctx, float32_t *data, uint8_t *segMas
                 maxIdx = i;
             }
         }
-        prevVal = segVal;
+        prevSegVal = segVal;
     }
     return 0;
 }

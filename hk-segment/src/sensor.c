@@ -73,10 +73,10 @@ sensor_dummy_data(sensor_context_t *ctx) {
                 ctx->buffer[idx] = ecg_stimulus[_dummy_slot_idxs[j]];
                 _dummy_slot_idxs[j] = (_dummy_slot_idxs[j] + 1) % ecg_stimulus_len;
             } else if (ctx->maxCfg->fifoSlotConfigs[j] == Max86150SlotPpgLed1) {
-                ctx->buffer[idx] = MET_PPG_MIN_VAL + ppg_stimulus[_dummy_slot_idxs[j]];
+                ctx->buffer[idx] = PPG_MET_MIN_VAL + ppg_stimulus[_dummy_slot_idxs[j]];
                 _dummy_slot_idxs[j] = (_dummy_slot_idxs[j] + 1) % ppg_stimulus_len;
             } else if (ctx->maxCfg->fifoSlotConfigs[j] == Max86150SlotPpgLed2) {
-                ctx->buffer[idx] = MET_PPG_MIN_VAL + ppg_stimulus[_dummy_slot_idxs[j]];
+                ctx->buffer[idx] = PPG_MET_MIN_VAL + ppg_stimulus[_dummy_slot_idxs[j]];
                 _dummy_slot_idxs[j] = (_dummy_slot_idxs[j] + 1) % ppg_stimulus_len;
             } else {
                 ctx->buffer[idx] = 0;

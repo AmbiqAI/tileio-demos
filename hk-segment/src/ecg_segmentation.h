@@ -1,5 +1,5 @@
 /**
- * @file segmentation.h
+ * @file ecg_segmentation.h
  * @author Adam Page (adam.page@ambiq.com)
  * @brief TFLM ECG segmentation
  * @version 1.0
@@ -9,10 +9,11 @@
  *
  */
 
-#ifndef __PK_SEGMENTATION_H
-#define __PK_SEGMENTATION_H
+#ifndef __PK_ECG_SEGMENTATION_H
+#define __PK_ECG_SEGMENTATION_H
 
 #include <stdint.h>
+#include "arm_math.h"
 #include "tensorflow/lite/micro/micro_interpreter.h"
 #include "tensorflow/lite/micro/system_setup.h"
 #include "tensorflow/lite/schema/schema_generated.h"
@@ -36,7 +37,7 @@ typedef struct {
  * @return uint32_t
  */
 uint32_t
-segmentation_init(tf_model_context_t *ctx);
+ecg_segmentation_init(tf_model_context_t *ctx);
 
 /**
  * @brief Run ECG segmentation model
@@ -49,6 +50,6 @@ segmentation_init(tf_model_context_t *ctx);
  * @return uint32_t
  */
 uint32_t
-segmentation_inference(tf_model_context_t *ctx, float32_t *data, uint8_t *segMask, uint32_t padLen, float32_t threshold);
+ecg_segmentation_inference(tf_model_context_t *ctx, float32_t *data, uint16_t *segMask, uint32_t padLen, float32_t threshold);
 
 #endif // __PK_SEGMENTATION_H

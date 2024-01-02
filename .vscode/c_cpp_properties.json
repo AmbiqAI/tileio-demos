@@ -3,7 +3,7 @@
         {
             "name": "CrossARM",
             "includePath": [
-                "${workspaceFolder}/evb/**"
+                "${workspaceFolder}/hk-segment/**"
             ],
             "defines": [],
             "macFrameworkPath": [],
