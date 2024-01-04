@@ -75,7 +75,6 @@ int ble_read_handler(ns_ble_service_t *s, struct ns_ble_characteristic *c, void 
 int ble_write_handler(ns_ble_service_t *s, struct ns_ble_characteristic *c, void *src) {
     memcpy(c->applicationValue, src, c->valueLen);
     if (c == bleCtx.uioChar) {
-        ns_lp_printf("UIO: %d vs %d\n", *(uint8_t*)src, uioState.bytes);
         set_leds_state();
     }
     return NS_STATUS_SUCCESS;
@@ -102,7 +101,7 @@ void ble_send_slot0_signals() {
 void ble_send_slot1_signals() {
     uint32_t offset;
     float32_t ppg1Val, ppg2Val;
-    int16_t *bleBuffer = (int16_t*)bleCtx.slot0SigBuffer;
+    int16_t *bleBuffer = (int16_t*)bleCtx.slot1SigBuffer;
     size_t numSamples = MIN3(
         ringbuffer_len(&rbPpg1Tx),
         ringbuffer_len(&rbPpg2Tx),
@@ -150,6 +149,18 @@ int ble_notify_slot1_sig_handler(ns_ble_service_t *s, struct ns_ble_characterist
     return NS_STATUS_SUCCESS;
 }
 
+int ble_notify_slot0_met_handler(ns_ble_service_t *s, struct ns_ble_characteristic *c) {
+    // ble_send_slot0_metrics();
+    return NS_STATUS_SUCCESS;
+}
+
+int ble_notify_slot1_met_handler(ns_ble_service_t *s, struct ns_ble_characteristic *c) {
+    // ble_send_slot1_metrics();
+    return NS_STATUS_SUCCESS;
+}
+
+
+
 int ble_service_init(void) {
     // Initialize BLE service
     char bleName[] = "PhysioKit";
@@ -170,7 +181,7 @@ int ble_service_init(void) {
     ns_ble_create_characteristic(
         bleCtx.slot0MetChar, PK_SLOT0_MET_CHAR_UUID, bleCtx.slot0MetBuffer, BLE_SLOT_MET_BUF_LEN,
         NS_BLE_READ | NS_BLE_NOTIFY,
-        NULL, NULL, NULL,
+        NULL, NULL, ble_notify_slot0_met_handler,
         1000*MET_CAPTURE_SEC, true, &(bleCtx.service->numAttributes)
     );
 
@@ -184,7 +195,7 @@ int ble_service_init(void) {
     ns_ble_create_characteristic(
         bleCtx.slot1MetChar, PK_SLOT1_MET_CHAR_UUID, bleCtx.slot1MetBuffer, BLE_SLOT_MET_BUF_LEN,
         NS_BLE_READ | NS_BLE_NOTIFY,
-        NULL, NULL, NULL,
+        NULL, NULL, ble_notify_slot1_met_handler,
         1000*MET_CAPTURE_SEC, true, &(bleCtx.service->numAttributes)
     );
 
@@ -308,7 +319,6 @@ void Slot1Task(void *pvParameters) {
         // Perform PPG segmentation
         numSamples = MIN(ringbuffer_len(&rbPpg1Seg), ringbuffer_len(&rbPpg2Seg));
         if (numSamples >= PPG_SEG_WINDOW_LEN) {
-             ns_timer_clear(&tickTimerCfg);
             ringbuffer_peek(&rbPpg1Seg, ppgSegInputs, PPG_SEG_WINDOW_LEN);
             // pk_apply_biquad_filter_f32(&ppg1FilterCtx, segInputs, segInputs, SEG_WINDOW_LEN);
             // pk_standardize_f32(segInputs, segInputs, SEG_WINDOW_LEN, NORM_STD_EPS);
@@ -323,8 +333,7 @@ void Slot1Task(void *pvParameters) {
             // pk_standardize_f32(segInputs, segInputs, SEG_WINDOW_LEN, NORM_STD_EPS);
             ringbuffer_push(&rbPpg2Met, &ppgSegInputs[PPG_SEG_PAD_LEN], PPG_SEG_VALID_LEN);
             ringbuffer_seek(&rbPpg2Seg, PPG_SEG_VALID_LEN);
-            lastTickUs = ns_us_ticker_read(&tickTimerCfg);
-            ns_lp_printf("Segmentation Time: %d\n", lastTickUs);
+            ns_lp_printf("Slot1 Segmentation\n");
         }
 
         // Perform metrics
@@ -334,7 +343,6 @@ void Slot1Task(void *pvParameters) {
             ringbuffer_len(&rbPpgMaskMet)
         );
         if (numSamples >= PPG_MET_WINDOW_LEN) {
-            ns_timer_clear(&tickTimerCfg);
             // Grab data from ringbuffers
             ringbuffer_peek(&rbPpg1Met, ppg1MetData, PPG_MET_WINDOW_LEN);
             ringbuffer_peek(&rbPpg2Met, ppg2MetData, PPG_MET_WINDOW_LEN);
@@ -346,7 +354,7 @@ void Slot1Task(void *pvParameters) {
                 ppgMaskMetData, PPG_MET_WINDOW_LEN,
                 &ppgMetResults
             );
-            // Broadcast metrics
+            // // Broadcast metrics
             ble_send_slot1_metrics();
             // Store metrics
             ringbuffer_push(&rbPpg1Tx, ppg1MetData, PPG_MET_VALID_LEN);
@@ -358,7 +366,7 @@ void Slot1Task(void *pvParameters) {
             ringbuffer_seek(&rbPpgMaskMet, PPG_MET_VALID_LEN);
 
             lastTickUs = ns_us_ticker_read(&tickTimerCfg);
-            ns_lp_printf("Metrics Time: %d\n", lastTickUs);
+            ns_lp_printf("Slot1 Metrics\n");
         }
         vTaskDelay(pdMS_TO_TICKS(1000*PPG_SEG_VALID_LEN/PPG_SAMPLE_RATE/4));
     }

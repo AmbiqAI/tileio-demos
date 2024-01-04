@@ -35,7 +35,7 @@ const ns_power_config_t nsPwrCfg = {
 };
 
 pk_uio_state_t uioState = {
-    .btn0 = false,
+    .btn0 = true,
     .btn1 = false,
     .btn2 = false,
     .btn3 = false,
@@ -371,7 +371,7 @@ pk_ble_context_t bleCtx = {
     .pool = &bleWsfBuffers,
     .service = &bleService,
     .slot0SigChar = &bleSlot0SigChar,
-    .slot1SigChar = &bleSlot0SigChar,
+    .slot1SigChar = &bleSlot1SigChar,
     .slot2SigChar = nullptr,
     .slot3SigChar = nullptr,
     .slot0MetChar = &bleSlot0MetChar,

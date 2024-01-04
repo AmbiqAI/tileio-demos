@@ -200,7 +200,7 @@ ecg_segmentation_inference(tf_model_context_t *ctx, float32_t *data, uint16_t *s
     uint8_t yMaxIdx = 0;
     float32_t yVal = 0;
     float32_t yMax = 0;
-    uint8_t qos = 0;
+    uint16_t qos = 0;
     float32_t avgQos = 0;
 
     // Copy data to input
@@ -246,8 +246,8 @@ ecg_segmentation_inference(tf_model_context_t *ctx, float32_t *data, uint16_t *s
     // TODO: Fix gaps in segmentation
 
     // Extract fiducial points
-    uint8_t prevSegVal = segMask[0] & SIG_MASK_SEG_MASK;
-    uint8_t segVal = 0;
+    uint16_t prevSegVal = segMask[0] & SIG_MASK_SEG_MASK;
+    uint16_t segVal = 0;
     int startIdx = 0;
     float32_t maxVal = abs(data[0]);
     int maxIdx = 0;
@@ -264,7 +264,7 @@ ecg_segmentation_inference(tf_model_context_t *ctx, float32_t *data, uint16_t *s
             if (startIdx >= 0 && (i - startIdx > 2)) {
                 // Fiducial peak value (e.g p-peak) will be same as segmentation value (e.g. p-wave)
                 segMask[maxIdx] |= (prevSegVal << ECG_MASK_FID_PEAK_OFFSET);
-                ns_lp_printf("Segment (%d, %d, %d): Fiducial (%d, %f)\n", segMask[maxIdx] & 0x0F, startIdx, i, maxIdx, maxVal);
+                // ns_lp_printf("Segment (%d, %d, %d): Fiducial (%d, %f)\n", segMask[maxIdx], startIdx, i, maxIdx, maxVal);
             }
             startIdx = -1;
         } else if (startIdx >= 0) {

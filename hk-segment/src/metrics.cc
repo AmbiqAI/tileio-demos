@@ -73,13 +73,13 @@ metrics_capture_ppg(
         } else {
             peakVal = PPG_FID_PEAK_SPEAK;
             beatVal = PPG_FID_BEAT_NSR;
-            hr += 60 / (rriMetrics[i] / PPG_SAMPLE_RATE);
+            hr += 60.0f / (rriMetrics[i] / (float32_t)PPG_SAMPLE_RATE);
             numBeats += 1;
         }
         ppgMask[peaksMetrics[i]] |= ((peakVal & PPG_MASK_FID_PEAK_MASK) << PPG_MASK_FID_PEAK_OFFSET);
         ppgMask[peaksMetrics[i]] |= ((beatVal & PPG_MASK_FID_BEAT_MASK) << PPG_MASK_FID_BEAT_OFFSET);
     }
-    hr /= MAX(1, numBeats);
+    hr /= MAX(1.0f, numBeats);
 
     // Annotate PPG mask with QoS
     if (ppg1Mean < PPG_MET_MIN_VAL || ppg2Mean < PPG_MET_MIN_VAL) {
@@ -99,14 +99,13 @@ metrics_capture_ppg(
     return err;
 }
 
-
 uint32_t
 metrics_capture_ecg(
     metrics_config_t *ctx,
     float32_t *ecg,
     uint16_t *ecgMask,
     size_t len,
-    metrics_ppg_results_t *results
+    metrics_ecg_results_t *results
 ) {
     uint32_t err = 0;
     uint16_t peakVal, beatVal;
@@ -136,7 +135,7 @@ metrics_capture_ecg(
         if (rriMask[i] == 1) {
             beatVal = ECG_FID_BEAT_NOISE;
         } else {
-            hr += 60 / (rriMetrics[i] / ECG_SAMPLE_RATE);
+            hr += 60.0f / (rriMetrics[i] / (float32_t)ECG_SAMPLE_RATE);
             beatVal = ECG_FID_BEAT_NSR;
             numBeats += 1;
         }
