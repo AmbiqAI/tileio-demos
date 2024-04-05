@@ -64,7 +64,7 @@ sensor_stop(sensor_context_t *ctx) {
 uint32_t
 sensor_dummy_data(sensor_context_t *ctx) {
     static size_t _dummy_slot_idxs[4] = { 0, 0, 0, 0 };
-    uint32_t numSamples = 16;
+    uint32_t numSamples = SENSOR_NOM_REFRESH_LEN;
     size_t idx;
     for (size_t i = 0; i < numSamples; i++) {
         for (size_t j = 0; j < ctx->maxCfg->numSlots; j++) {
@@ -73,11 +73,11 @@ sensor_dummy_data(sensor_context_t *ctx) {
                 ctx->buffer[idx] = ecg_stimulus[_dummy_slot_idxs[j]];
                 _dummy_slot_idxs[j] = (_dummy_slot_idxs[j] + 1) % ecg_stimulus_len;
             } else if (ctx->maxCfg->fifoSlotConfigs[j] == Max86150SlotPpgLed1) {
-                ctx->buffer[idx] = PPG_MET_MIN_VAL + ppg_stimulus[_dummy_slot_idxs[j]];
-                _dummy_slot_idxs[j] = (_dummy_slot_idxs[j] + 1) % ppg_stimulus_len;
+                ctx->buffer[idx] = PPG_MET_MIN_VAL + ppg_red_stimulus[_dummy_slot_idxs[j]];
+                _dummy_slot_idxs[j] = (_dummy_slot_idxs[j] + 1) % ppg_red_stimulus_len;
             } else if (ctx->maxCfg->fifoSlotConfigs[j] == Max86150SlotPpgLed2) {
-                ctx->buffer[idx] = PPG_MET_MIN_VAL + ppg_stimulus[_dummy_slot_idxs[j]];
-                _dummy_slot_idxs[j] = (_dummy_slot_idxs[j] + 1) % ppg_stimulus_len;
+                ctx->buffer[idx] = PPG_MET_MIN_VAL + ppg_ir_stimulus[_dummy_slot_idxs[j]];
+                _dummy_slot_idxs[j] = (_dummy_slot_idxs[j] + 1) % ppg_ir_stimulus_len;
             } else {
                 ctx->buffer[idx] = 0;
             }
@@ -88,8 +88,14 @@ sensor_dummy_data(sensor_context_t *ctx) {
 
 uint32_t
 sensor_capture_data(sensor_context_t *ctx) {
-    if (ctx->is_stimulus) {
+    if (!ctx->is_live) {
         return sensor_dummy_data(ctx);
     }
     return max86150_read_fifo_samples(ctx->maxCtx, ctx->buffer, ctx->maxCfg->fifoSlotConfigs, ctx->maxCfg->numSlots);
+}
+
+void sensor_ecg_to_input(float32_t adcVal, uint32_t iaGain, uint32_t pgaGain) {
+    float32_t iaFactor = iaGain == 0 ? 5 : iaGain == 1 ? 9.5 : iaGain == 2 ? 20 : 50;
+    float32_t pgaFactor = pgaGain == 0 ? 1 : pgaGain == 1 ? 2 : pgaGain == 2 ? 4 : 8;
+    float32_t ecgMv = adcVal*12.247/iaFactor/pgaFactor; // (uV)
 }

@@ -52,6 +52,16 @@ size_t
 ringbuffer_push(rb_config_t *ctx, void *data, size_t len);
 
 /**
+ * @brief Fill ringbuffer with data
+ *
+ * @param ctx Ringbuffer context
+ * @param value Value to fill
+ * @param len Length of data
+ * @return size_t
+ */
+size_t ringbuffer_fill(rb_config_t *ctx, void* value, size_t len);
+
+/**
  * @brief Pop data from ringbuffer
  *
  * @param ctx Ringbuffer context
@@ -94,3 +104,12 @@ ringbuffer_seek(rb_config_t *ctx, size_t len);
 size_t
 ringbuffer_transfer(rb_config_t *src, rb_config_t *dst, size_t len);
 #endif // __RINGBUFFER_H
+
+/**
+ * @brief Flush ringbuffer
+ *
+ * @param ctx Ringbuffer context
+ * @return size_t
+ */
+size_t
+ringbuffer_flush(rb_config_t *ctx);

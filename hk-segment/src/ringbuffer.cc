@@ -37,6 +37,16 @@ size_t ringbuffer_push(rb_config_t *ctx, void *data, size_t len) {
     return len;
 }
 
+size_t ringbuffer_fill(rb_config_t *ctx, void* value, size_t len) {
+    size_t space = ringbuffer_space(ctx);
+    size_t amt = len > space ? space : len;
+    for (size_t i = 0; i < amt; i++) {
+        memcpy(((char *)ctx->buffer) + ctx->head * ctx->dlen, value, ctx->dlen);
+        ctx->head = (ctx->head + 1) % ctx->size;
+    }
+    return amt;
+}
+
 size_t ringbuffer_pop(rb_config_t *ctx, void *data, size_t len) {
     for (size_t i = 0; i < len; i++) {
         if (ringbuffer_len(ctx) == 0) {
@@ -99,4 +109,11 @@ ringbuffer_transfer(rb_config_t *src, rb_config_t *dst, size_t len) {
         dst->head = (dst->head + 1) % dst->size;
     }
     return amt;
+}
+
+size_t
+ringbuffer_flush(rb_config_t *ctx) {
+    size_t len = ringbuffer_len(ctx);
+    ctx->tail = ctx->head;
+    return len;
 }

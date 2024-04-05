@@ -26,6 +26,8 @@ typedef struct {
  */
 typedef struct {
     float32_t hr;  // Heart rate (bpm)
+    float32_t hrv;  // Heart rate variability (ms)
+    float32_t ips; // Inference per second
 } metrics_ecg_results_t;
 
 
@@ -34,7 +36,7 @@ typedef struct {
  *
  */
 typedef struct {
-    float32_t hr;  // Heart rate (bpm)
+    float32_t pr;  // Pulse rate (bpm)
     float32_t spo2;  // Blood oxygen saturation (%)
 } metrics_ppg_results_t;
 
@@ -55,6 +57,8 @@ metrics_capture_ppg(
     float32_t *ppg2,
     uint16_t *ppgMask,
     size_t len,
+    float32_t ppg1Mean,
+    float32_t ppg2Mean,
     metrics_ppg_results_t *results
 );
 

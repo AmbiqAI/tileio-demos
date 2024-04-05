@@ -30,6 +30,7 @@
 #define SENSOR_PPG2_SLOT (1)
 #define SENSOR_ECG_SLOT (2)
 #define SENSOR_BUF_LEN (2 * 32) // Double FIFO depth
+#define SENSOR_NOM_REFRESH_LEN (5)
 
 ///////////////////////////////////////////////////////////////////////////////
 // Preprocess Configuration
@@ -41,7 +42,7 @@
 #define ECG_SAMPLE_RATE (100)
 #define ECG_DS_RATE (SENSOR_RATE / ECG_SAMPLE_RATE)
 
-#define PPG_SOS_LEN (3)
+#define PPG_SOS_LEN (2)
 #define PPG_SAMPLE_RATE (50)
 #define PPG_DS_RATE (SENSOR_RATE / PPG_SAMPLE_RATE)
 
@@ -51,8 +52,8 @@
 ///////////////////////////////////////////////////////////////////////////////
 
 #define ECG_SEG_MODEL_SIZE_KB (60)
-#define ECG_SEG_THRESHOLD (0.75)
-#define ECG_SEG_NUM_CLASS (2)
+#define ECG_SEG_THRESHOLD (0.5) // 0.75
+#define ECG_SEG_NUM_CLASS (4) // 2
 #define ECG_SEG_WINDOW_LEN (250)
 #define ECG_SEG_PAD_LEN (25)
 #define ECG_SEG_VALID_LEN (ECG_SEG_WINDOW_LEN - 2 * ECG_SEG_PAD_LEN)
@@ -60,9 +61,9 @@
 
 // ECG Segmentation Classes
 #define ECG_SEG_NONE (0)
-#define ECG_SEG_PWAVE (3)
-#define ECG_SEG_QRS (1)
-#define ECG_SEG_TWAVE (3)
+#define ECG_SEG_PWAVE (1) // 3
+#define ECG_SEG_QRS (2) // 1
+#define ECG_SEG_TWAVE (3)  // 3
 
 ///////////////////////////////////////////////////////////////////////////////
 // PPG Segmentation Configuration
@@ -75,6 +76,10 @@
 #define PPG_SEG_PAD_LEN (12)
 #define PPG_SEG_VALID_LEN (PPG_SEG_WINDOW_LEN - 2 * PPG_SEG_PAD_LEN)
 #define PPG_SEG_BUF_LEN (2 * PPG_SEG_WINDOW_LEN)
+#define PPG_SEG_FFT_WINDOW_LEN (256)
+#define PPG_SEG_FFT_MIN_IDX (6) // ceil(FREQ/(FS/FFT_LEN)) where FREQ=0.5, FS=50, FFT_LEN=256 -> ceil(0.5/(50/256))
+#define PPG_SEG_FFT_MAX_IDX (11) // ceil(FREQ/(FS/FFT_LEN)) where FREQ=3.0, FS=50, FFT_LEN=256 -> ceil(2.0/(50/256))
+
 
 // PPG Segmentation Classes
 #define PPG_SEG_NONE (0)
@@ -104,7 +109,7 @@
 #define SIG_QOS_GOOD (3)
 
 ///////////////////////////////////////////////////////////////////////////////
-// PK BLE SLOT0 (ECG) Mask Format
+// TIO BLE SLOT0 (ECG) Mask Format
 ///////////////////////////////////////////////////////////////////////////////
 
 // ECG Mask
@@ -118,6 +123,11 @@
 #define ECG_MASK_QOS_OFFSET (6)
 #define ECG_MASK_QOS_MASK (0x3)
 
+#define ECG_QOS_GOOD_THRESH (0.65)
+#define ECG_QOS_FAIR_THRESH (0.60)
+#define ECG_QOS_POOR_THRESH (0.55)
+#define ECG_QOS_BAD_AVG_THRESH (0.65)
+
 #define ECG_MASK_FID_PEAK_OFFSET (8)
 #define ECG_MASK_FID_PEAK_MASK (0x3)
 #define ECG_MASK_FID_BEAT_OFFSET (10)
@@ -125,8 +135,8 @@
 
 // ECG Fiducial Peak Classes
 #define ECG_FID_PEAK_NONE (0)
-#define ECG_FID_PEAK_PPEAK (3)
-#define ECG_FID_PEAK_QRS (1)
+#define ECG_FID_PEAK_PPEAK (1)
+#define ECG_FID_PEAK_QRS (2)
 #define ECG_FID_PEAK_TPEAK (3)
 
 // ECG Fiducial Beat Classes
@@ -137,7 +147,7 @@
 
 
 ///////////////////////////////////////////////////////////////////////////////
-// PK BLE SLOT0 (ECG) Mask Format
+// TIO BLE SLOT0 (ECG) Mask Format
 ///////////////////////////////////////////////////////////////////////////////
 
 // PPG Mask
@@ -176,7 +186,7 @@
 #define MIN_RR_SEC (0.3)
 #define MAX_RR_SEC (2.0)
 #define MIN_RR_DELTA (0.3)
-#define MET_CAPTURE_SEC (5)
+#define MET_CAPTURE_SEC (10)
 #define MAX_RR_PEAKS (100 * MET_CAPTURE_SEC)
 
 #define ECG_MET_WINDOW_LEN (MET_CAPTURE_SEC * ECG_SAMPLE_RATE)
@@ -188,30 +198,34 @@
 #define PPG_MET_PAD_LEN (25)
 #define PPG_MET_VALID_LEN (PPG_MET_WINDOW_LEN - 2 * PPG_MET_PAD_LEN)
 #define PPG_MET_BUF_LEN (2 * PPG_MET_WINDOW_LEN)
-
+#define PPG_MET_FFT_WINDOW_LEN (512)
+#define PPG_FFT_MIN_IDX (6) // ceil(FREQ/(FS/FFT_LEN)) where FREQ=0.5, FS=50, FFT_LEN=256 -> ceil(0.5/(50/256)) = 6
+#define PPG_FFT_MAX_IDX (31) // ceil(FREQ/(FS/FFT_LEN)) where FREQ=3.0, FS=50, FFT_LEN=256 -> ceil(3.0/(50/256)) = 31
 #define PPG_MET_MIN_VAL (80000)
+
+#define ECG_TX_BUF_LEN ECG_SEG_BUF_LEN
+#define PPG_TX_BUF_LEN PPG_SEG_BUF_LEN
 
 ///////////////////////////////////////////////////////////////////////////////
 // BLE Configuration
 ///////////////////////////////////////////////////////////////////////////////
 
-#define BLE_SLOT_SIG_BUF_LEN (242)
-#define BLE_SLOT_MET_BUF_LEN (242)
-#define BLE_UIO_BUF_LEN (64)
+#define TIO_BLE_SLOT_SIG_BUF_LEN (242)
+#define TIO_BLE_SLOT_MET_BUF_LEN (242)
+#define TIO_BLE_UIO_BUF_LEN (8)
 
-#define PK_SLOT_SVC_UUID "eecb7db88b2d402cb995825538b49328"
-#define PK_SLOT0_SIG_CHAR_UUID "5bca2754ac7e4a27a1270f328791057a"
-#define PK_SLOT1_SIG_CHAR_UUID "45415793a0e94740bca4ce90bd61839f"
-#define PK_SLOT2_SIG_CHAR_UUID "dd19792c63f1420f920cc58bada8efb9"
-#define PK_SLOT3_SIG_CHAR_UUID "f1f691580bd64cab90a8528baf74cc74"
+#define TIO_SLOT_SVC_UUID "eecb7db88b2d402cb995825538b49328"
+#define TIO_SLOT0_SIG_CHAR_UUID "5bca2754ac7e4a27a1270f328791057a"
+#define TIO_SLOT1_SIG_CHAR_UUID "45415793a0e94740bca4ce90bd61839f"
+#define TIO_SLOT2_SIG_CHAR_UUID "dd19792c63f1420f920cc58bada8efb9"
+#define TIO_SLOT3_SIG_CHAR_UUID "f1f691580bd64cab90a8528baf74cc74"
 
-#define PK_SLOT0_MET_CHAR_UUID "44a3a7b8d7c849329a10d99dd63775ae"
-#define PK_SLOT1_MET_CHAR_UUID "e64fa683462848c5bede824aaa7c3f5b"
-#define PK_SLOT2_MET_CHAR_UUID "b9d28f5365f04392afbcc602f9dc3c8b"
-#define PK_SLOT3_MET_CHAR_UUID "917c9eb43dbc4cb3bba2ec4e288083f4"
+#define TIO_SLOT0_MET_CHAR_UUID "44a3a7b8d7c849329a10d99dd63775ae"
+#define TIO_SLOT1_MET_CHAR_UUID "e64fa683462848c5bede824aaa7c3f5b"
+#define TIO_SLOT2_MET_CHAR_UUID "b9d28f5365f04392afbcc602f9dc3c8b"
+#define TIO_SLOT3_MET_CHAR_UUID "917c9eb43dbc4cb3bba2ec4e288083f4"
 
-#define PK_UIO_CHAR_UUID "b9488d48069b47f794f0387f7fbfd1fa"
-
+#define TIO_UIO_CHAR_UUID "b9488d48069b47f794f0387f7fbfd1fa"
 
 #define BLE_NUM_CHARS (2+2+1)
 

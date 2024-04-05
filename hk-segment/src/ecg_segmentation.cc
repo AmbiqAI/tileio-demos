@@ -25,6 +25,7 @@
 #include "tensorflow/lite/schema/schema_generated.h"
 // Locals
 #include "physiokit/pk_ecg.h"
+#include "physiokit/pk_hrv.h"
 #include "store.h"
 #include "constants.h"
 #include "ecg_segmentation.h"
@@ -191,7 +192,6 @@ ecg_segmentation_init(tf_model_context_t *ctx) {
     ctx->input = ctx->interpreter->input(0);
     ctx->output = ctx->interpreter->output(0);
     return 0;
-
 }
 
 uint32_t
@@ -214,9 +214,7 @@ ecg_segmentation_inference(tf_model_context_t *ctx, float32_t *data, uint16_t *s
 
     // Invoke model
     TfLiteStatus invokeStatus = ctx->interpreter->Invoke();
-    if (invokeStatus != kTfLiteOk) {
-        return invokeStatus;
-    }
+    if (invokeStatus != kTfLiteOk) { return invokeStatus; }
 
     // Extract output and segmentation mask
     for (int i = padLen; i < ctx->output->dims->data[1] - (int)padLen; i++) {
@@ -232,7 +230,7 @@ ecg_segmentation_inference(tf_model_context_t *ctx, float32_t *data, uint16_t *s
                 yMaxIdx = j;
             }
         }
-        qos = yMax > 0.85 ? 3 : yMax > 0.80 ? 2 : yMax > 0.75 ? 1 : 0;
+        qos = yMax > ECG_QOS_GOOD_THRESH ? 3 : yMax > ECG_QOS_FAIR_THRESH ? 2 : yMax > ECG_QOS_POOR_THRESH ? 1 : 0;
         avgQos += yMax;
         if (false && yMaxIdx > 0) {
             ns_lp_printf("Segment (%d, %d): QoS (%d, %f)\n", yMaxIdx, i, qos, yMax);
@@ -241,9 +239,16 @@ ecg_segmentation_inference(tf_model_context_t *ctx, float32_t *data, uint16_t *s
         segMask[i] |= ((qos & SIG_MASK_QOS_MASK) << SIG_MASK_QOS_OFFSET);
     }
     avgQos /= (ctx->output->dims->data[1] - 2 * padLen);
-    ns_lp_printf("Segmentation QoS: %f\n", avgQos);
+    ns_lp_printf("ECG Segmentation QoS: %f\n", avgQos);
 
-    // TODO: Fix gaps in segmentation
+    if (avgQos < ECG_QOS_BAD_AVG_THRESH) {
+        for (int i = padLen; i < ctx->output->dims->data[1] - (int)padLen; i++) {
+            segMask[i] = 0;
+            data[i] = 0;
+        }
+    }
+
+    // TODO: Fix gaps in segmentation. Merge same segment types that are separated by less than N samples
 
     // Extract fiducial points
     uint16_t prevSegVal = segMask[0] & SIG_MASK_SEG_MASK;

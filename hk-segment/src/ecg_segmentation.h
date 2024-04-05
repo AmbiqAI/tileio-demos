@@ -9,8 +9,8 @@
  *
  */
 
-#ifndef __PK_ECG_SEGMENTATION_H
-#define __PK_ECG_SEGMENTATION_H
+#ifndef __HK_ECG_SEGMENTATION_H
+#define __HK_ECG_SEGMENTATION_H
 
 #include <stdint.h>
 #include "arm_math.h"
@@ -52,4 +52,4 @@ ecg_segmentation_init(tf_model_context_t *ctx);
 uint32_t
 ecg_segmentation_inference(tf_model_context_t *ctx, float32_t *data, uint16_t *segMask, uint32_t padLen, float32_t threshold);
 
-#endif // __PK_SEGMENTATION_H
+#endif // __HK_SEGMENTATION_H

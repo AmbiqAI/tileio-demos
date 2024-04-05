@@ -3,7 +3,9 @@
     "files.associations": {
         "ns_ambiqsuite_harness.h": "c",
         "stimulus.h": "c",
-        "stack": "cpp"
+        "stack": "cpp",
+        "stdint.h": "c",
+        "math.h": "c"
     },
     "makefile.makeDirectory": "./",
     "makefile.launchConfigurations": [
