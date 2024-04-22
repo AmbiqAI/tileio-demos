@@ -263,14 +263,14 @@ static ns_ble_pool_config_t bleWsfBuffers = {
 };
 
 tio_uio_state_t uioState = {
-    .io0 = false,
-    .io1 = false,
-    .io2 = false,
-    .io3 = false,
-    .io4 = false,
-    .io5 = false,
-    .io6 = false,
-    .io7 = false,
+    .io0 = 0,
+    .io1 = 0,
+    .io2 = 0,
+    .io3 = 0,
+    .io4 = 0,
+    .io5 = 0,
+    .io6 = 0,
+    .io7 = 0,
 };
 static uint8_t bleSlot0SigBuffer[TIO_BLE_SLOT_SIG_BUF_LEN] = {0};
 static uint8_t bleSlot1SigBuffer[TIO_BLE_SLOT_SIG_BUF_LEN] = {0};
