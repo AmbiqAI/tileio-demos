@@ -39,6 +39,14 @@ print_array_f32(float32_t *arr, size_t len, char *name);
 void
 print_array_u32(uint32_t *arr, size_t len, char *name);
 
+uint16_t computeCRC16(const uint8_t *data, uint32_t lengthInBytes);
+
+void getDeviceId(uint8_t *deviceId);
+
+
+void deviceId2SerialId(uint8_t *deviceId, char *serialId, size_t len);
+
+
 #ifdef __cplusplus
 }
 #endif

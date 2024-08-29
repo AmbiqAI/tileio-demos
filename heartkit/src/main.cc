@@ -39,6 +39,7 @@ size_t ucHeapSize = APP_HEAP_SIZE;
 uint8_t ucHeap[APP_HEAP_SIZE] __attribute__((aligned(4)));
 #endif
 
+
 // RTOS Tasks
 TaskHandle_t radioTaskHandle;
 TaskHandle_t sensorTaskHandle;
@@ -93,6 +94,7 @@ int ble_write_handler(ns_ble_service_t *s, struct ns_ble_characteristic *c, void
 }
 
 void ble_send_slot0_signals() {
+
     uint32_t offset;
     float32_t ecgRaw, ecgDen;
     int16_t *bleBuffer = (int16_t*)bleCtx.slot0SigBuffer;
@@ -123,11 +125,12 @@ void ble_send_slot1_signals() {
 void ble_send_slot0_metrics() {
     uint16_t *metBuffer = (uint16_t*)bleCtx.slot0MetBuffer;
     float32_t *metResults = (float32_t *)(&metBuffer[1]);
-    metBuffer[0] = 4;
+    metBuffer[0] = 5;
     metResults[0] = ecgMetResults.hr;
     metResults[1] = ecgMetResults.hrv;
     metResults[2] = ecgMetResults.denoise_ips;
     metResults[3] = ecgMetResults.segment_ips;
+    metResults[4] = ecgMetResults.denoise_cossim;
     ns_ble_send_value(bleCtx.slot0MetChar, NULL);
 }
 
@@ -181,9 +184,9 @@ int ble_service_init(void) {
     // UIO
     ns_ble_create_characteristic(
         bleCtx.uioChar, TIO_UIO_CHAR_UUID, bleCtx.uioBuffer, TIO_BLE_UIO_BUF_LEN,
-        NS_BLE_READ | NS_BLE_WRITE,
+        NS_BLE_READ | NS_BLE_WRITE | NS_BLE_NOTIFY,
         &ble_read_handler, &ble_write_handler, NULL,
-        0, true, &(bleCtx.service->numAttributes)
+        1000, true, &(bleCtx.service->numAttributes)
     );
 
     bleCtx.service->numCharacteristics = BLE_NUM_CHARS;
@@ -302,10 +305,20 @@ void Slot0Task(void *pvParameters) {
             // Copy noisy signal to Tx
             ringbuffer_push(&rbEcgRawTx, &ecgDenInout[ECG_DEN_PAD_LEN], ECG_DEN_VALID_LEN);
 
+            // Copy noisy
+            arm_copy_f32(ecgDenInout, ecgDenScratch, ECG_DEN_WINDOW_LEN);
+
             // Denoise signal
             pk_apply_biquad_filtfilt_f32(&ecgFilterCtx, ecgDenInout, ecgDenInout, ECG_DEN_WINDOW_LEN, ecgDenScratch);
 
             err = ecg_denoise_inference(&ecgDenModelCtx, ecgDenInout, ecgDenInout, 0, ECG_DEN_THRESHOLD);
+
+            // Compute cosine similarity
+            if (noiseLevel > 0) {
+                cosine_similarity_f32(&ecgDenInout[ECG_DEN_PAD_LEN], &ecgDenScratch[ECG_DEN_PAD_LEN], ECG_DEN_VALID_LEN, &ecgMetResults.denoise_cossim);
+            } else {
+                ecgMetResults.denoise_cossim = 1.0;
+            }
 
             // Copy denoised signal to Tx and Seg
             ringbuffer_push(&rbEcgSeg, &ecgDenInout[ECG_DEN_PAD_LEN], ECG_DEN_VALID_LEN);
@@ -390,6 +403,7 @@ int main(void) {
     NS_TRY(ns_power_config(&nsPwrCfg), "Power Init Failed\n");
     NS_TRY(ns_i2c_interface_init(&nsI2cCfg, I2C_SPEED_HZ), "I2C Init Failed\n");
     NS_TRY(ns_timer_init(&timerCfg), "Timer0 Init failed.\n");
+
     // NS_TRY(ns_timer_init(&slot1TimerCfg), "Timer1 Init failed.\n");
     NS_TRY(ns_peripheral_button_init(&nsBtnCfg), "Button Init failed.\n");
     am_devices_led_array_init(am_bsp_psLEDs, AM_BSP_NUM_LEDS);

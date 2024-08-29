@@ -257,7 +257,8 @@ metrics_ecg_results_t ecgMetResults = {
     .hr = 0,
     .hrv = 0,
     .denoise_ips = 0,
-    .segment_ips = 0
+    .segment_ips = 0,
+    .denoise_cossim = 0
 };
 
 

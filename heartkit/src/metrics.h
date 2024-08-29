@@ -29,6 +29,7 @@ typedef struct {
     float32_t hrv;  // Heart rate variability (ms)
     float32_t denoise_ips;
     float32_t segment_ips;
+    float32_t denoise_cossim;
 } metrics_ecg_results_t;
 
 
@@ -40,6 +41,22 @@ typedef struct {
     float32_t pr;  // Pulse rate (bpm)
     float32_t spo2;  // Blood oxygen saturation (%)
 } metrics_ppg_results_t;
+
+/**
+ * @brief Compute cosine similarity
+ *
+ * @param ref Reference signal
+ * @param sig Signal to compare
+ * @param len Length of signals
+ * @param result Result of comparison
+ * @return uint32_t
+ */
+uint32_t cosine_similarity_f32(
+    float32_t *ref,
+    float32_t *sig,
+    size_t len,
+    float32_t *result
+);
 
 /**
  * @brief Initialize metrics

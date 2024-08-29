@@ -109,7 +109,7 @@ extern int main(void);
 // Reserve space for the system stack.
 //
 //*****************************************************************************
-__attribute__((section(".stack"))) static uint32_t g_pui32Stack[1024];
+__attribute__((section(".stack"))) static uint32_t g_pui32Stack[STACK_SIZE];
 
 //*****************************************************************************
 //

@@ -8,8 +8,8 @@
  * @copyright Copyright (c) 2023
  *
  */
-#ifndef __HK_CONSTANTS_H
-#define __HK_CONSTANTS_H
+#ifndef __APP_CONSTANTS_H
+#define __APP_CONSTANTS_H
 
 #define GPIO_TRIGGER 22
 
@@ -23,4 +23,4 @@
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
 
-#endif // __HK_CONSTANTS_H
+#endif // __APP_CONSTANTS_H

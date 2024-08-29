@@ -1,0 +1,87 @@
+{
+    "name": "HeartKit: ECG Denoise",
+    "location": "EW2024",
+    "slots": [
+        {
+            "name": "ECG",
+            "type": "ecg",
+            "unit": "mV",
+            "fs": 100,
+            "dtype": "i16",
+            "chs": [
+                "ECG"
+            ],
+            "metrics": [
+                "HR",
+                "HRV",
+                "IPS"
+            ]
+        },
+        {
+            "name": "PPG",
+            "type": "ppg",
+            "unit": "mV",
+            "fs": 50,
+            "dtype": "i16",
+            "chs": [
+                "RED (660nm)",
+                "IR (880nm)"
+            ],
+            "metrics": [
+                "PR",
+                "SPO2"
+            ]
+        }
+    ],
+    "uio": {
+        "btn0": {
+            "name": "MODE",
+            "enabled": true,
+            "off": "DEMO",
+            "on": "LIVE"
+        },
+        "btn1": {
+            "name": "BTN1",
+            "enabled": false,
+            "off": "Off",
+            "on": "On"
+        },
+        "btn2": {
+            "name": "BTN2",
+            "enabled": false,
+            "off": "Off",
+            "on": "On"
+        },
+        "btn3": {
+            "name": "BTN3",
+            "enabled": false,
+            "off": "Off",
+            "on": "On"
+        },
+        "led0": {
+            "name": "LED0",
+            "enabled": false,
+            "off": "Off",
+            "on": "On"
+        },
+        "led1": {
+            "name": "LED1",
+            "enabled": true,
+            "off": "Off",
+            "on": "On"
+        },
+        "led2": {
+            "name": "LED2",
+            "enabled": false,
+            "off": "Off",
+            "on": "On"
+        },
+        "led3": {
+            "name": "LED3",
+            "enabled": false,
+            "off": "Off",
+            "on": "On"
+        }
+    },
+    "lastSeenDate": "2024-03-22T17:09:27.263Z"
+}

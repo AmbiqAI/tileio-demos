@@ -23,6 +23,7 @@
 
 uint32_t
 sensor_init(sensor_context_t *ctx) {
+    return 0;
     max86150_powerup(ctx->maxCtx);
     ns_delay_us(RESET_DELAY_US);
     max86150_reset(ctx->maxCtx);
@@ -93,9 +94,10 @@ sensor_dummy_data(sensor_context_t *ctx, uint32_t reqSamples) {
 
 uint32_t
 sensor_capture_data(sensor_context_t *ctx) {
-    uint32_t numSamples = max86150_read_fifo_samples(ctx->maxCtx, ctx->buffer, ctx->maxCfg->fifoSlotConfigs, ctx->maxCfg->numSlots);
-    if (ctx->input_source < NUM_INPUT_PTS) {
+    uint32_t numSamples = SENSOR_NOM_REFRESH_LEN;
+    // uint32_t numSamples = max86150_read_fifo_samples(ctx->maxCtx, ctx->buffer, ctx->maxCfg->fifoSlotConfigs, ctx->maxCfg->numSlots);
+    // if (ctx->input_source < NUM_INPUT_PTS) {
         return sensor_dummy_data(ctx, numSamples);
-    }
+    // }
     return numSamples;
 }
