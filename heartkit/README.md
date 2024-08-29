@@ -22,6 +22,7 @@ flowchart LR
     PPG_MET --> PPG_BLE_MET[BLE: Metrics]
     end
 ```
+
 ## Downloads
 
 - [**Device Configuration**](../assets/device-configs/hk-device-config.json)
