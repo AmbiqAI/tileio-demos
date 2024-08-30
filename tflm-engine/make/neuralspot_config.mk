@@ -65,10 +65,10 @@ BINDIR := $(BINDIRROOT)/$(BOARDROOT)_$(EVB)/$(TOOLCHAIN)
 
 ##### Extern Library Defaults #####
 ifndef AS_VERSION
-AS_VERSION := R4.4.1
+AS_VERSION := R4.5.0
 endif
 ifndef TF_VERSION
-TF_VERSION := 0264234_Nov_15_2023
+TF_VERSION := ce72f7b8_Feb_17_2024
 endif
 SR_VERSION := R7.70a
 ERPC_VERSION := R1.9.1
@@ -105,15 +105,19 @@ endif
 
 # $(info BLE_PRESENT: $(BLE_PRESENT))
 
-ifeq ($(BLE_PRESENT),1)
-	ifeq ($(AS_VERSION),R4.3.0)
-		DEFINES+= NS_BLE_SUPPORTED
-	else ifeq ($(AS_VERSION),R4.4.1)
-		DEFINES+= NS_BLE_SUPPORTED
-	else ifeq ($(AS_VERSION),R3.1.1)
-		DEFINES+= NS_BLE_SUPPORTED
-	endif
-endif
+# ifeq ($(BLE_PRESENT),1)
+# 	ifeq ($(AS_VERSION),R4.3.0)
+# 		DEFINES+= NS_BLE_SUPPORTED
+# 	else ifeq ($(AS_VERSION),R4.4.1)
+# 		DEFINES+= NS_BLE_SUPPORTED
+# 	else ifeq ($(AS_VERSION),R4.5.0)
+# 		DEFINES+= NS_BLE_SUPPORTED
+# 	else ifeq ($(AS_VERSION),R3.1.1)
+# 		DEFINES+= NS_BLE_SUPPORTED
+# 	endif
+# endif
+
+# $(info DEFINES: $(DEFINES))
 
 # Set USB
 ifeq ($(PART),apollo4p)
@@ -180,6 +184,11 @@ else ifeq ($(AS_VERSION),R4.4.1)
 	ifeq ($(BLE_SUPPORTED),1)
 		DEFINES+= NS_BLE_SUPPORTED
 	endif
+else ifeq ($(AS_VERSION),R4.5.0)
+	BLE_SUPPORTED := $(BLE_PRESENT)
+	ifeq ($(BLE_SUPPORTED),1)
+		DEFINES+= NS_BLE_SUPPORTED
+	endif
 else ifeq ($(AS_VERSION),R3.1.1)
 	BLE_SUPPORTED := $(BLE_PRESENT)
 	ifeq ($(BLE_SUPPORTED),1)
@@ -188,6 +197,10 @@ else ifeq ($(AS_VERSION),R3.1.1)
 else
 	BLE_SUPPORTED := 0
 endif
+
+# $(info BLE_SUPPORTED: $(BLE_SUPPORTED))
+# $(info DEFINES: $(DEFINES))
+
 
 DEFINES+= SEC_ECC_CFG=SEC_ECC_CFG_HCI
 # DEFINES+= WSF_TRACE_ENABLED
@@ -198,15 +211,22 @@ DEFINES+= AM_DEBUG_PRINTF
 # 1 = load TF library with debug info, turn on TF debug statements
 MLDEBUG ?= 0
 
-ifeq ($(TF_VERSION),d5f819d_Aug_10_2023)
-	DEFINES+= NS_TFSTRUCTURE_RECENT
-endif
-ifeq ($(TF_VERSION),0264234_Nov_15_2023)
-	DEFINES+= NS_TFSTRUCTURE_RECENT
-endif
-ifeq ($(TF_VERSION),fecdd5d)
-	DEFINES+= NS_TFSTRUCTURE_RECENT
-endif
+# Legacy - dont define for older TFs
+DEFINES+= NS_TFSTRUCTURE_RECENT
+
+# ifeq ($(TF_VERSION),d5f819d_Aug_10_2023)
+# 	DEFINES+= NS_TFSTRUCTURE_RECENT
+# endif
+# ifeq ($(TF_VERSION),0264234_Nov_15_2023)
+# 	DEFINES+= NS_TFSTRUCTURE_RECENT
+# endif
+# ifeq ($(TF_VERSION),fecdd5d)
+# 	DEFINES+= NS_TFSTRUCTURE_RECENT
+# endif
+# ifeq ($(TF_VERSION),ce72f7b8_Feb_17_2024)
+# 	DEFINES+= NS_TFSTRUCTURE_RECENT
+# endif
+
 
 # 1 = load optimized TF library with prints enabled, turn on TF profiler
 MLPROFILE := 0
