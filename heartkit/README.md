@@ -9,7 +9,6 @@ This application performs real-time, on-device ECG analysis using a multi-headed
 
 In addition to selecting the user input, the end user is also able to adjust a number of other parameters, such as injecting noise, selecting denoising and segmentation modes, and adjusting the hardware such as clock speed.
 
-
 ```mermaid
 flowchart LR
     INP[Input Selection] --> DEN[ECG Denoising]
@@ -57,5 +56,6 @@ IO7: Leds 0-7
 
 ## Downloads
 
-- [**Device Configuration**](../assets/device-configs/hk-device-config.json)
-- [**Dashboard Configuration**](../assets/dashboard-configs/hk-dashboard-config.json)
+The following files are available for download:
+
+* [**Tileio Configuration**](./assets/hk-dashboard-config.json)
