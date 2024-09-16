@@ -82,5 +82,20 @@ SECTIONS
         _ebss = .;
     } > RWMEM
 
+<<<<<<< HEAD:ei-ecg-foundation/src/ns-core/apollo3/gcc/linker_script.ld
     .ARM.attributes 0 : { *(.ARM.attributes) }
+=======
+   .shared :
+    {
+        . = ALIGN(4);
+        KEEP(*(.resource_table))
+        . = ALIGN(4);
+
+        _ssdata = .;
+        KEEP(*(.shared))
+        . = ALIGN(4);
+        _sedata = .;
+    } > SHARED_SRAM AT>MCU_MRAM
+    _init_data_sram = LOADADDR(.shared);
+>>>>>>> 9de8e658cc867fef843e161d691ac37f214f0eb3:hk-segment/libs/linker_script.ld
 }

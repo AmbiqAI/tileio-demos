@@ -28,9 +28,9 @@ sequenceDiagram
     EVB->>PC: Send output data
 ```
 
-### Supported Targets
+### Supported Platforms
 
-The following Ambiq EVBs are currently supported by neuralSPOT. Be sure to set the TARGET variable to the desired value.
+The following Ambiq EVBs are currently supported by neuralSPOT. Be sure to set the PLATFORM variable to the desired value.
 
 * [__apollo4p_evb__](https://www.ambiq.top/en/apollo4-plus-soc-eval-board): Apollo4 Plus SoC, Eval Board
 * [__apollo4p_blue_kbr_evb__](https://www.ambiq.top/en/apollo4-blue-plus-kxr-soc-eval-board): Apollo4 Blue Plus KBR SoC Eval Board
@@ -55,11 +55,11 @@ Note: You can optionally use `armclang` instead. The makefile can be configured 
 
 ## Building
 
-Run the following command to build the firmware. Be sure to set the `TARGET` variable to the desired value.
+Run the following command to build the firmware. Be sure to set the `PLATFORM` variable to the desired value.
 
 ```bash
-make TARGET=apollo4p_evb clean
-make TARGET=apollo4p_evb
+make PLATFORM=apollo4p_evb clean
+make PLATFORM=apollo4p_evb
 ```
 
 ## Flashing
@@ -67,7 +67,7 @@ make TARGET=apollo4p_evb
 To flash the firmware to the EVB, simply conntect the EVB to your computer using a USB-C cable and run the following command. Ensure USB-C cable is plugged into the J-Link USB port on the EVB.
 
 ```bash
-make TARGET=apollo4p_evb deploy
+make PLATFORM=apollo4p_evb deploy
 ```
 
 ### SWO Logging
@@ -75,5 +75,5 @@ make TARGET=apollo4p_evb deploy
 To view SWO ouput, you can run the following command.
 
 ```bash
-make TARGET=apollo4p_evb view
+make PLATFORM=apollo4p_evb view
 ```

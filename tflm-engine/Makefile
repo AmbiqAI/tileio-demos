@@ -1,4 +1,5 @@
 include make/helpers.mk
+include make/local_overrides.mk
 include make/neuralspot_config.mk
 include make/neuralspot_toolchain.mk
 include make/jlink.mk

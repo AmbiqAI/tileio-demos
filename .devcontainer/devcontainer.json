@@ -26,7 +26,11 @@
 
     "forwardPorts": [6006],
 
-    "postCreateCommand": "./.devcontainer/postCreateCommand.sh",
+    "postCreateCommand": "./.devcontainer/install.sh",
+
+    // ls -l /dev/ | grep ttyA # grab dialout group id
+    "runArgs": ["--device-cgroup-rule=c 166:* rmw", "--privileged"],
+
     "containerEnv": {
     },
     "remoteEnv": {
