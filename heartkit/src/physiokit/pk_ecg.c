@@ -30,7 +30,7 @@ pk_ecg_square_filter_mask(uint32_t *rrIntervals, uint32_t numPeaks, uint8_t *mas
 }
 
 uint32_t
-pk_ecg_find_peaks_f32(ecg_peak_f32_t *ctx, float32_t *ecg, uint32_t ecgLen, uint32_t *peaks)
+pk_ecg_find_peaks_f32(ecg_peak_f32_t *ctx, float32_t *ecg, uint32_t ecgLen, uint32_t *peaks, uint16_t *mask)
 {
     /**
      * @brief Find R peaks in PPG signal
@@ -61,6 +61,13 @@ pk_ecg_find_peaks_f32(ecg_peak_f32_t *ctx, float32_t *ecg, uint32_t ecgLen, uint
     // Subtract average gradient as threshold
     arm_sub_f32(qrsGrad, avgGrad, qrsGrad, ecgLen);
 
+
+    if (mask != NULL) {
+        for (size_t i = 0; i < ecgLen; i++) {
+            mask[i] = 0;
+        }
+    }
+
     uint32_t riseEdge, fallEdge, peakDelay, peakLen, peak;
     float32_t peakVal;
     uint32_t numPeaks = 0;
@@ -84,10 +91,15 @@ pk_ecg_find_peaks_f32(ecg_peak_f32_t *ctx, float32_t *ecg, uint32_t ecgLen, uint
             arm_max_f32(&ecg[m], peakLen, &peakVal, &peak);
             peak += m;
             peakDelay = numPeaks > 0 ? peak - peaks[numPeaks - 1]  : minQrsDelay;
-
             if (peakLen >= minQrsWidth && peakDelay >= minQrsDelay)
             {
                 peaks[numPeaks++] = peak;
+                // Mark QRS complex region
+                if (mask != NULL) {
+                    for (size_t j = m; j < n; j++) {
+                        mask[j] = 1;
+                    }
+                }
             }
             m = -1;
             n = -1;

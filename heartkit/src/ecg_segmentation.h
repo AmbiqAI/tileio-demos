@@ -32,10 +32,16 @@ ecg_segmentation_init(tf_model_context_t *ctx);
  * @param data ECG data
  * @param segMask Segmentation mask
  * @param padLen Padding length
- * @param threshold Segmentation threshold
+ * @param threshold Threshold
  * @return uint32_t
  */
 uint32_t
 ecg_segmentation_inference(tf_model_context_t *ctx, float32_t *data, uint16_t *segMask, uint32_t padLen, float32_t threshold);
+
+uint32_t
+ecg_physiokit_segmentation_inference(float32_t *data, uint16_t *segMask, uint32_t padLen);
+
+void
+ecg_segmentation_extract_fiducials(uint16_t *segMask, float32_t *data);
 
 #endif // __HK_SEGMENTATION_H

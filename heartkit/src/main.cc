@@ -10,13 +10,14 @@
  */
 
 #include "ns_ambiqsuite_harness.h"
-#include "ns_ble.h"
 #include "ns_i2c.h"
 #include "ns_peripherals_power.h"
 #include "FreeRTOS.h"
 #include "task.h"
 #include "arm_math.h"
+#include "ns_ble.h"
 
+#include "main.h"
 #include "am_devices_led.h"
 
 #include "constants.h"
@@ -29,9 +30,11 @@
 #include "tflm.h"
 #include "ecg_segmentation.h"
 #include "ecg_denoise.h"
+#include "ecg_arrhythmia.h"
 #include "metrics.h"
 #include "ringbuffer.h"
-#include "main.h"
+#include "tileio.h"
+
 
 #if (configAPPLICATION_ALLOCATED_HEAP == 1)
     #define APP_HEAP_SIZE (NS_BLE_DEFAULT_MALLOC_K * 4 * 1024)
@@ -39,188 +42,26 @@ size_t ucHeapSize = APP_HEAP_SIZE;
 uint8_t ucHeap[APP_HEAP_SIZE] __attribute__((aligned(4)));
 #endif
 
-
 // RTOS Tasks
-TaskHandle_t radioTaskHandle;
-TaskHandle_t sensorTaskHandle;
-TaskHandle_t slot0TaskHandle;
-TaskHandle_t appSetupTask;
-
-void
-set_leds_state() {
-    uint32_t ledVal = uioState.io7 & 0x07;
-    am_devices_led_array_out(am_bsp_psLEDs, AM_BSP_NUM_LEDS, ledVal);
-}
+static TaskHandle_t sensorTaskHandle;
+static TaskHandle_t processTaskHandle;
+static TaskHandle_t tioTaskHandle;
+static TaskHandle_t appSetupTask;
 
 
-void
-fetch_leds_state() {
-    uint8_t ledVal = (am_devices_led_get(am_bsp_psLEDs, 2) << 2);
-    ledVal |= (am_devices_led_get(am_bsp_psLEDs, 1) << 1);
-    ledVal |= am_devices_led_get(am_bsp_psLEDs, 0);
-    uioState.io7 = ledVal;
-}
+tio_context_t tioCtx = {
+    .uio_update_cb = NULL,
+    .slot_update_cb = NULL
+};
 
 ////////////////////////////////////////////////////////////////
-// BLE
+// APP STATE
 ////////////////////////////////////////////////////////////////
 
-void webbleHandler(wsfEventMask_t event, wsfMsgHdr_t *pMsg) {
-    ns_lp_printf("webbleHandler\n");
-}
-void webbleHandlerInit(wsfHandlerId_t handlerId) {
-    ns_lp_printf("webbleHandlerInit\n");
-}
-
-int ble_read_handler(ns_ble_service_t *s, struct ns_ble_characteristic *c, void *dest) {
-    memcpy(dest, c->applicationValue, c->valueLen);
-    return NS_STATUS_SUCCESS;
-}
-
-int ble_write_handler(ns_ble_service_t *s, struct ns_ble_characteristic *c, void *src) {
-    memcpy(c->applicationValue, src, c->valueLen);
-    if (c == bleCtx.uioChar) {
-        uioState.io0 = bleCtx.uioBuffer[0];
-        uioState.io1 = bleCtx.uioBuffer[1];
-        uioState.io2 = bleCtx.uioBuffer[2];
-        uioState.io3 = bleCtx.uioBuffer[3];
-        uioState.io4 = bleCtx.uioBuffer[4];
-        uioState.io5 = bleCtx.uioBuffer[5];
-        uioState.io6 = bleCtx.uioBuffer[6];
-        uioState.io7 = bleCtx.uioBuffer[7];
-        set_leds_state();
-    }
-    return NS_STATUS_SUCCESS;
-}
-
-void ble_send_slot0_signals() {
-
-    uint32_t offset;
-    float32_t ecgRaw, ecgDen;
-    int16_t *bleBuffer = (int16_t*)bleCtx.slot0SigBuffer;
-    size_t numSamples = MIN3(
-        ringbuffer_len(&rbEcgRawTx),
-        ringbuffer_len(&rbEcgDenTx),
-        ringbuffer_len(&rbEcgMaskTx)
-    );
-
-    if (numSamples >= BLE_SLOT0_SIG_NUM_VALS) {
-        bleBuffer[0] = BLE_SLOT0_SIG_NUM_VALS;
-        offset = 1;
-        for (size_t i = 0; i < BLE_SLOT0_SIG_NUM_VALS; i++) {
-            ringbuffer_pop(&rbEcgMaskTx, &bleBuffer[offset + 0], 1);
-            ringbuffer_pop(&rbEcgRawTx, &ecgRaw, 1);
-            ringbuffer_pop(&rbEcgDenTx, &ecgDen, 1);
-            bleBuffer[offset + 1] = (int16_t)CLIP(BLE_SLOT0_SCALE*ecgRaw, -32768, 32767);
-            bleBuffer[offset + 2] = (int16_t)CLIP(BLE_SLOT0_SCALE*ecgDen, -32768, 32767);
-            offset += 3;
-        }
-        ns_ble_send_value(bleCtx.slot0SigChar, NULL);
-    }
-}
-
-void ble_send_slot1_signals() {
-}
-
-void ble_send_slot0_metrics() {
-    uint16_t *metBuffer = (uint16_t*)bleCtx.slot0MetBuffer;
-    float32_t *metResults = (float32_t *)(&metBuffer[1]);
-    metBuffer[0] = 5;
-    metResults[0] = ecgMetResults.hr;
-    metResults[1] = ecgMetResults.hrv;
-    metResults[2] = ecgMetResults.denoise_ips;
-    metResults[3] = ecgMetResults.segment_ips;
-    metResults[4] = ecgMetResults.denoise_cossim;
-    ns_ble_send_value(bleCtx.slot0MetChar, NULL);
-}
-
-void ble_send_slot1_metrics() {
-}
-
-int ble_notify_slot0_sig_handler(ns_ble_service_t *s, struct ns_ble_characteristic *c) {
-    ble_send_slot0_signals();
-    return NS_STATUS_SUCCESS;
-}
-
-int ble_notify_slot1_sig_handler(ns_ble_service_t *s, struct ns_ble_characteristic *c) {
-    ble_send_slot1_signals();
-    return NS_STATUS_SUCCESS;
-}
-
-int ble_notify_slot0_met_handler(ns_ble_service_t *s, struct ns_ble_characteristic *c) {
-    // ble_send_slot0_metrics();
-    return NS_STATUS_SUCCESS;
-}
-
-int ble_notify_slot1_met_handler(ns_ble_service_t *s, struct ns_ble_characteristic *c) {
-    // ble_send_slot1_metrics();
-    return NS_STATUS_SUCCESS;
-}
-
-int ble_service_init(void) {
-    // Initialize BLE service
-    char bleName[] = "HeartKit";
-    NS_TRY(ns_ble_char2uuid(TIO_SLOT_SVC_UUID, &(bleCtx.service->uuid128)), "Failed to convert UUID\n");
-    memcpy(bleCtx.service->name, bleName, sizeof(bleName));
-    bleCtx.service->nameLen = strlen(bleName);
-    bleCtx.service->baseHandle = 0x0800;
-    bleCtx.service->poolConfig = bleCtx.pool;
-    bleCtx.service->numAttributes = 0;
-
-    // SLOT0: ECG
-    ns_ble_create_characteristic(
-        bleCtx.slot0SigChar, TIO_SLOT0_SIG_CHAR_UUID, bleCtx.slot0SigBuffer, TIO_BLE_SLOT_SIG_BUF_LEN,
-        NS_BLE_READ | NS_BLE_NOTIFY,
-        NULL, NULL, ble_notify_slot0_sig_handler,
-        1000/BLE_SLOT0_FS, true, &(bleCtx.service->numAttributes)
-    );
-    ns_ble_create_characteristic(
-        bleCtx.slot0MetChar, TIO_SLOT0_MET_CHAR_UUID, bleCtx.slot0MetBuffer, TIO_BLE_SLOT_MET_BUF_LEN,
-        NS_BLE_READ | NS_BLE_NOTIFY,
-        NULL, NULL, ble_notify_slot0_met_handler,
-        1000*MET_CAPTURE_SEC, true, &(bleCtx.service->numAttributes)
-    );
-
-    // UIO
-    ns_ble_create_characteristic(
-        bleCtx.uioChar, TIO_UIO_CHAR_UUID, bleCtx.uioBuffer, TIO_BLE_UIO_BUF_LEN,
-        NS_BLE_READ | NS_BLE_WRITE | NS_BLE_NOTIFY,
-        &ble_read_handler, &ble_write_handler, NULL,
-        1000, true, &(bleCtx.service->numAttributes)
-    );
-
-    bleCtx.service->numCharacteristics = BLE_NUM_CHARS;
-    ns_ble_create_service(bleCtx.service);
-    ns_ble_add_characteristic(bleCtx.service, bleCtx.slot0SigChar);
-    ns_ble_add_characteristic(bleCtx.service, bleCtx.slot0MetChar);
-    ns_ble_add_characteristic(bleCtx.service, bleCtx.uioChar);
-    // Initialize BLE, create structs, start service
-    ns_ble_start_service(bleCtx.service);
-    return NS_STATUS_SUCCESS;
-}
-
-void RadioTask(void *pvParameters) {
-    NS_TRY(ble_service_init(), "BLE init failed.\n");
-    ledstick_set_all_colors(&nsI2cCfg, LEDSTICK_ADDR, 0, 207, 193);
-    ledstick_set_all_brightness(&nsI2cCfg, LEDSTICK_ADDR, 4);
-    while (1) { wsfOsDispatcher(); }
-}
-
-uint32_t
-capture_sensor() {
-    int32_t val;
-    size_t numSamples;
-    float32_t ecgVal;
-    numSamples = sensor_capture_data(&sensorCtx);
-    // ns_lp_printf("Captured %d samples\n", numSamples);
-    for (size_t i = 0; i < numSamples; i++) {
-        val  = sensorCtx.buffer[sensorCtx.maxCfg->numSlots * i + SENSOR_ECG_SLOT];
-        ecgVal  = val & (1 << 17) ? val - (1 << 18) : val; // 2's complement
-        ringbuffer_push(&rbEcgSensor, &ecgVal, 1);
-    }
-    return numSamples;
-}
-
+/**
+ * @brief Flush pipeline buffers
+ *
+ */
 void flush_pipeline() {
     ringbuffer_flush(&rbEcgSensor);
     ringbuffer_flush(&rbEcgDen);
@@ -232,13 +73,209 @@ void flush_pipeline() {
     ringbuffer_flush(&rbEcgMaskTx);
 }
 
-void preprocess() {
+void
+set_input_source(uint8_t source) {
+    source = MIN(source, NUM_INPUT_PTS + 1); // + 1 for sensor mode
+    if (appState.inputSource != source) {
+        appState.inputSource = source;
+        sensorCtx.inputSource = source;
+        ns_lp_printf("Input Source: %d\n", sensorCtx.inputSource);
+        flush_pipeline();
+    }
+}
+
+void
+set_noise_input(uint8_t level) {
+    if (appState.noiseLevel != level) {
+        appState.noiseLevel = level;
+        ns_lp_printf("Noise Level: %d\n", appState.noiseLevel);
+    }
+}
+
+void
+set_denoise_mode(uint8_t mode) {
+    mode = MIN(mode, 2);
+    if (appState.denoiseMode != mode) {
+        appState.denoiseMode = mode;
+        ns_lp_printf("Denoise Mode: %d\n", appState.denoiseMode);
+    }
+}
+
+void
+set_segmentation_mode(uint8_t mode) {
+    mode = MIN(mode, 2);
+    if (appState.segMode != mode) {
+        appState.segMode = mode;
+        ns_lp_printf("Segmentation Mode: %d\n", appState.segMode);
+    }
+}
+
+
+void
+set_speed_mode(uint8_t mode) {
+    mode = MIN(mode, 1);
+    if (appState.speedMode != mode) {
+        appState.speedMode = mode;
+        ns_set_performance_mode(mode ? NS_MAXIMUM_PERF : NS_MINIMUM_PERF);
+        ns_lp_printf("Speed Mode: %d\n", appState.speedMode);
+    }
+}
+
+void
+set_leds_state(uint8_t state) {
+    uint8_t ledVal = state & 0x07;
+    if (appState.ledState != ledVal) {
+        appState.ledState = ledVal;
+        am_devices_led_array_out(
+            am_bsp_psLEDs,
+            AM_BSP_NUM_LEDS,
+            appState.ledState
+        );
+        ns_lp_printf("LED State: %d\n", appState.ledState);
+    }
+}
+
+
+void
+fetch_leds_state() {
+    uint8_t ledVal = (am_devices_led_get(am_bsp_psLEDs, 2) << 2);
+    ledVal |= (am_devices_led_get(am_bsp_psLEDs, 1) << 1);
+    ledVal |= am_devices_led_get(am_bsp_psLEDs, 0);
+    appState.ledState = ledVal;
+}
+
+////////////////////////////////////////////////////////////////
+// TIO
+////////////////////////////////////////////////////////////////
+
+
+/**
+ * @brief Send slot0 (ECG) signals to TIO
+ *
+ */
+void send_slot0_signals() {
+    int16_t buffer[120];
+    float32_t ecgRaw, ecgDen;
+    uint32_t length;
+    size_t numSamples = MIN3(
+        ringbuffer_len(&rbEcgRawTx),
+        ringbuffer_len(&rbEcgDenTx),
+        ringbuffer_len(&rbEcgMaskTx)
+    );
+    numSamples = MIN(
+        numSamples,
+        240/(3*sizeof(int16_t))
+    );
+    if (numSamples == 0) { return; }
+    length = 0;
+    for (size_t i = 0; i < numSamples; i++) {
+        ringbuffer_pop(&rbEcgMaskTx, &buffer[length + 0], 1);
+        ringbuffer_pop(&rbEcgRawTx, &ecgRaw, 1);
+        ringbuffer_pop(&rbEcgDenTx, &ecgDen, 1);
+        buffer[length + 1] = (int16_t)CLIP(TIO_SLOT0_SCALE*ecgRaw, -32768, 32767);
+        buffer[length + 2] = (int16_t)CLIP(TIO_SLOT0_SCALE*ecgDen, -32768, 32767);
+        length += 3;
+    }
+    tio_send_slot_data(0, 0, (uint8_t *)buffer, length * sizeof(int16_t));
+}
+
+/**
+ * @brief Send slot0 (ECG) metrics to TIO
+ *
+ */
+void send_slot0_metrics() {
+    float32_t buffer[60];
+    buffer[0] = appMetResults.hr;
+    buffer[1] = appMetResults.hrv;
+    buffer[2] = appMetResults.denoise_cossim;
+    buffer[3] = appMetResults.arrhythmia_label;
+    buffer[4] = appMetResults.denoise_ips;
+    buffer[5] = appMetResults.segment_ips;
+    buffer[6] = appMetResults.arrhythmia_ips;
+    buffer[7] = appMetResults.cpu_perc_util;
+    tio_send_slot_data(0, 1, (uint8_t *)buffer, 8*sizeof(float32_t));
+}
+
+void received_slot_data(uint8_t slot, uint8_t slot_type, const uint8_t *data, uint32_t length) {
+    // No slot data expected
+}
+
+void send_uio_state() {
+    uint8_t uioBuffer[8];
+    uioBuffer[0] = appState.inputSource;
+    uioBuffer[1] = appState.noiseLevel;
+    uioBuffer[2] = appState.denoiseMode;
+    uioBuffer[3] = appState.segMode;
+    uioBuffer[4] = appState.speedMode;
+    uioBuffer[5] = 0;
+    uioBuffer[6] = 0;
+    uioBuffer[7] = appState.ledState;
+    tio_send_uio_state(uioBuffer, 8);
+}
+
+void received_uio_state(const uint8_t *data, uint32_t length) {
+    for (size_t i = 0; i < length; i++) {
+        ns_lp_printf("UIO[%d]: %d\n", i, data[i]);
+    }
+    set_input_source(data[0]);
+    set_noise_input(data[1]);
+    set_denoise_mode(data[2]);
+    set_segmentation_mode(data[3]);
+    set_speed_mode(data[4]);
+    set_leds_state(data[7]);
+    send_uio_state();
+}
+
+////////////////////////////////////////////////////////////////
+// SENSOR TASK BLOCK
+////////////////////////////////////////////////////////////////
+
+/**
+ * @brief Capture sensor data
+ *
+ * @return uint32_t
+ */
+uint32_t
+capture_sensor() {
     int32_t val;
     size_t numSamples;
-    float32_t ecgVal;
-    if (sensorCtx.input_source != uioState.io0) {
-        sensorCtx.input_source = uioState.io0;
-        ns_lp_printf("Button IO0 toggled: %d\n", sensorCtx.input_source);
+    float32_t val_f32;
+    size_t idx;
+    numSamples = sensor_capture_data(&sensorCtx);
+    for (size_t i = 0; i < numSamples; i++) {
+        for (size_t j = 0; j < sensorCtx.maxCfg->numSlots; j++) {
+            idx = sensorCtx.maxCfg->numSlots * i + j;
+            if (sensorCtx.maxCfg->fifoSlotConfigs[j] == Max86150SlotEcg) {
+                val = sensorCtx.buffer[idx];
+                if (sensorCtx.inputSource < NUM_INPUT_PTS) {
+                    val_f32 = val;
+                } else {
+                    val_f32  = val & (1 << 17) ? val - (1 << 18) : val; // 2's complement
+                }
+                ringbuffer_push(&rbEcgSensor, &val_f32, 1);
+            } else if (sensorCtx.maxCfg->fifoSlotConfigs[j] == Max86150SlotPpgLed1) {
+                val = sensorCtx.buffer[idx];
+                val_f32 = val;
+                // ringbuffer_push(&rbEcgSensor, &val_f32, 1);
+            } else if (sensorCtx.maxCfg->fifoSlotConfigs[j] == Max86150SlotPpgLed2) {
+                val = sensorCtx.buffer[idx];
+                // val_f32 = val;
+                // ringbuffer_push(&rbPpgLed2Sensor, &val_f32, 1);
+            }
+        }
+    }
+    return numSamples;
+}
+
+/**
+ * @brief Preprocess sensor data
+ *
+ */
+void preprocess() {
+    size_t numSamples;
+    if (sensorCtx.inputSource != appState.inputSource) {
+        sensorCtx.inputSource = appState.inputSource;
+        ns_lp_printf("Input Source: %d\n", sensorCtx.inputSource);
         flush_pipeline();
     }
     // Downsample sensor data to slots
@@ -250,39 +287,38 @@ void preprocess() {
 }
 
 void SensorTask(void *pvParameters) {
+    size_t numSamples;
     while (true) {
-        capture_sensor();
+        numSamples = capture_sensor();
         preprocess();
-        vTaskDelay(pdMS_TO_TICKS(500));
+        if (numSamples >= 30) {
+            ns_lp_printf("<SENSOR %d >\n", numSamples);
+        }
+        // Delay for 16 samples (200Hz)
+        vTaskDelay(pdMS_TO_TICKS(80));
     }
 }
 
-void Slot0Task(void *pvParameters) {
-    uint32_t err;
-    size_t numSamples;
-    uint32_t lastTickUs = 0, delayUs = 0;
-    int32_t noiseLevel, bwNoise, emNoise, maNoise;
-    bool doneStep = false;
+
+////////////////////////////////////////////////////////////////
+// PROCESS TASK BLOCK
+////////////////////////////////////////////////////////////////
+
+void ProcessTask(void *pvParameters) {
+    uint32_t err = 0;
+    uint32_t delayUs = 0, tickUs = 0;
+    uint32_t deltaUs = 0;
+    float32_t cpuIdleMs = 0, cpuBusyMs = 0;
+
     while (true) {
-        doneStep = false;
+        err = 0;
         ns_timer_clear(&timerCfg);
-        lastTickUs = 0;
 
-        // Capture sensor data
-        numSamples = capture_sensor();
-        preprocess();
-        lastTickUs = ns_us_ticker_read(&timerCfg);
-
-        // Perform ECG denoise
-        numSamples = ringbuffer_len(&rbEcgDen);
-        if (numSamples >= ECG_DEN_WINDOW_LEN) {
-
-            // Dont add noise to user input (noisy already)
-            if (uioState.io0 < NUM_INPUT_PTS) {
-                noiseLevel = uioState.io1;
-            } else {
-                noiseLevel = 0;
-            }
+        ///////////////////////////////////////////////
+        // DENOSING SIGNAL BLOCK
+        ///////////////////////////////////////////////
+        if (ringbuffer_len(&rbEcgDen) >= ECG_DEN_WINDOW_LEN) {
+            tickUs = ns_us_ticker_read(&timerCfg);
 
             // Grab data from ringbuffer
             ringbuffer_peek(&rbEcgDen, ecgDenInout, ECG_DEN_WINDOW_LEN);
@@ -290,58 +326,74 @@ void Slot0Task(void *pvParameters) {
             // Preprocess signal
             pk_standardize_f32(ecgDenInout, ecgDenInout, ECG_DEN_WINDOW_LEN, NORM_STD_EPS);
 
-            // Add noise to signal
-            if (noiseLevel > 0) {
-                // Randomly split noiseLevel into three parts
-                noiseLevel = MAX(3, noiseLevel);
-                bwNoise = rand() % noiseLevel;
-                emNoise = rand() % (noiseLevel - bwNoise);
-                maNoise = MAX(0, noiseLevel - bwNoise - emNoise);
-                nstdb_add_bw_noise(ecgDenInout, ECG_DEN_WINDOW_LEN, bwNoise*2e-5);
-                nstdb_add_em_noise(ecgDenInout, ECG_DEN_WINDOW_LEN, emNoise*2e-5);
-                nstdb_add_ma_noise(ecgDenInout, ECG_DEN_WINDOW_LEN, maNoise*5e-5);
+            // Copy clean signal to buffer
+            arm_copy_f32(ecgDenInout, ecgDenNoise, ECG_DEN_WINDOW_LEN);
+
+            // Add noise to signal based on input
+            if (sensorCtx.inputSource < NUM_INPUT_PTS && appState.noiseLevel > 0) {
+                nstdb_add_em_noise(ecgDenInout, ecgDenInout, ECG_DEN_WINDOW_LEN, (float32_t)appState.noiseLevel*1.0e-5);
+                nstdb_add_ma_noise(ecgDenInout, ecgDenInout, ECG_DEN_WINDOW_LEN, (float32_t)appState.noiseLevel*1.0e-5);
+                nstdb_add_bw_noise(ecgDenInout, ecgDenInout, ECG_DEN_WINDOW_LEN, (float32_t)appState.noiseLevel*2.0e-5);
             }
 
-            // Copy noisy signal to Tx
-            ringbuffer_push(&rbEcgRawTx, &ecgDenInout[ECG_DEN_PAD_LEN], ECG_DEN_VALID_LEN);
+            // Copy noisy signal to seg buffer
+            ringbuffer_push(&rbEcgRawSeg, &ecgDenInout[ECG_DEN_PAD_LEN], ECG_DEN_VALID_LEN);
 
-            // Copy noisy
-            arm_copy_f32(ecgDenInout, ecgDenScratch, ECG_DEN_WINDOW_LEN);
-
-            // Denoise signal
-            pk_apply_biquad_filtfilt_f32(&ecgFilterCtx, ecgDenInout, ecgDenInout, ECG_DEN_WINDOW_LEN, ecgDenScratch);
-
-            err = ecg_denoise_inference(&ecgDenModelCtx, ecgDenInout, ecgDenInout, 0, ECG_DEN_THRESHOLD);
+            // Apply biquad filter for DSP and AI modes
+            if (appState.denoiseMode == DenoiseModeDsp) {
+                err = pk_apply_biquad_filtfilt_f32(&ecgFilterCtx, ecgDenInout, ecgDenInout, ECG_DEN_WINDOW_LEN, ecgDenScratch);
+            }
+            // Denoise using AI model
+            else if (appState.denoiseMode == DenoiseModeAi) {
+                err = ecg_denoise_inference(&ecgDenModelCtx, ecgDenInout, ecgDenInout, 0, ECG_DEN_THRESHOLD);
+            }
 
             // Compute cosine similarity
-            if (noiseLevel > 0) {
-                cosine_similarity_f32(&ecgDenInout[ECG_DEN_PAD_LEN], &ecgDenScratch[ECG_DEN_PAD_LEN], ECG_DEN_VALID_LEN, &ecgMetResults.denoise_cossim);
+            if (appState.noiseLevel > 0) {
+                cosine_similarity_f32(
+                    &ecgDenInout[ECG_DEN_PAD_LEN],
+                    &ecgDenNoise[ECG_DEN_PAD_LEN],
+                    ECG_DEN_VALID_LEN,
+                    &appMetResults.denoise_cossim
+                );
             } else {
-                ecgMetResults.denoise_cossim = 1.0;
+                appMetResults.denoise_cossim = 1.0;
             }
+            appMetResults.denoise_cossim *= 100.0;
 
-            // Copy denoised signal to Tx and Seg
+            // Copy clean signal to seg buffer
             ringbuffer_push(&rbEcgSeg, &ecgDenInout[ECG_DEN_PAD_LEN], ECG_DEN_VALID_LEN);
 
             // Seek ringbuffers
             ringbuffer_seek(&rbEcgDen, ECG_DEN_VALID_LEN);
-            lastTickUs = ns_us_ticker_read(&timerCfg) - lastTickUs;
-            ecgMetResults.denoise_ips = 1000000.0/lastTickUs;
-            ns_lp_printf("Denoise Time: %d (err=%d)\n", lastTickUs, err);
-            doneStep = true;
+            deltaUs = ns_us_ticker_read(&timerCfg) - tickUs;
+            appMetResults.denoise_ips = 1000000.0/deltaUs;
+            ns_lp_printf("<DENOISE Time: %d (err=%d) >\n", deltaUs/1000, err);
         }
 
-        // Perform ECG segmentation
-        numSamples = ringbuffer_len(&rbEcgSeg);
-        if (!doneStep && numSamples >= ECG_SEG_WINDOW_LEN) {
+        ///////////////////////////////////////////////
+        // SEGMENTATION BLOCK
+        ///////////////////////////////////////////////
+        else if (ringbuffer_len(&rbEcgSeg) >= ECG_SEG_WINDOW_LEN) {
+            tickUs = ns_us_ticker_read(&timerCfg);
             ringbuffer_peek(&rbEcgSeg, ecgSegInout, ECG_SEG_WINDOW_LEN);
 
             // pk_standardize_f32(ecgSegInout, ecgSegInout, ECG_SEG_WINDOW_LEN, NORM_STD_EPS);
 
-            err = ecg_segmentation_inference(&ecgSegModelCtx, ecgSegInout, ecgSegMask, 0, ECG_SEG_THRESHOLD);
+            if (appState.segMode == SegmentationModeDsp) {
+                err = ecg_physiokit_segmentation_inference(ecgSegInout, ecgSegMask, 0);
+            } else if (appState.segMode == SegmentationModeAi) {
+                err = ecg_segmentation_inference(&ecgSegModelCtx, ecgSegInout, ecgSegMask, 0, ECG_SEG_THRESHOLD);
+            } else{
+                err = 0;
+                for (size_t i = 0; i < ECG_SEG_WINDOW_LEN; i++) {
+                    ecgSegMask[i] = ECG_SEG_NONE;
+                }
+            }
 
             // Push seg mask to Tx
-            ringbuffer_push(&rbEcgDenTx, &ecgSegInout[ECG_DEN_PAD_LEN], ECG_DEN_VALID_LEN);
+            ringbuffer_transfer(&rbEcgRawSeg, &rbEcgRawTx, ECG_SEG_VALID_LEN);
+            ringbuffer_push(&rbEcgDenTx, &ecgSegInout[ECG_SEG_PAD_LEN], ECG_SEG_VALID_LEN);
             ringbuffer_push(&rbEcgMaskTx, &ecgSegMask[ECG_SEG_PAD_LEN], ECG_SEG_VALID_LEN);
 
             // Push ecg and mask to metrics
@@ -349,73 +401,101 @@ void Slot0Task(void *pvParameters) {
             ringbuffer_push(&rbEcgMaskMet, &ecgSegMask[ECG_SEG_PAD_LEN], ECG_SEG_VALID_LEN);
 
             ringbuffer_seek(&rbEcgSeg, ECG_SEG_VALID_LEN);
-            lastTickUs = ns_us_ticker_read(&timerCfg) - lastTickUs;
-            ecgMetResults.segment_ips = 1000000.0/lastTickUs;
-            ns_lp_printf("Segment Time:  %d (err=%d)\n", lastTickUs, err);
-            doneStep = true;
+            deltaUs = ns_us_ticker_read(&timerCfg) - tickUs;
+            appMetResults.segment_ips = 1000000.0/deltaUs;
+            ns_lp_printf("<SEGMENT Time: %d (err=%d) >\n", deltaUs/1000, err);
         }
 
-        // Perform metrics
-        numSamples = MIN(ringbuffer_len(&rbEcgMet), ringbuffer_len(&rbEcgMaskMet));
-        if (!doneStep && numSamples >= ECG_MET_WINDOW_LEN) {
+        ///////////////////////////////////////////////
+        // METRICS BLOCK
+        ///////////////////////////////////////////////
+        else if (MIN(ringbuffer_len(&rbEcgMet), ringbuffer_len(&rbEcgMaskMet)) >= ECG_MET_WINDOW_LEN) {
+            tickUs = ns_us_ticker_read(&timerCfg);
             // Grab data from ringbuffers
             ringbuffer_peek(&rbEcgMet, ecgMetData, ECG_MET_WINDOW_LEN);
             ringbuffer_peek(&rbEcgMaskMet, ecgMaskMetData, ECG_MET_WINDOW_LEN);
+
+            if (true) {
+                appMetResults.arrhythmia_label = ecg_arrhythmia_inference(&ecgArrModelCtx, ecgMetData, ECG_ARR_THRESHOLD);
+            }
+
             // Compute metrics
-            metrics_capture_ecg(
+            err = metrics_capture_ecg(
                 &metricsCfg,
                 ecgMetData, ecgMaskMetData, ECG_MET_WINDOW_LEN,
-                &ecgMetResults
+                &appMetResults
             );
-            // Broadcast metrics
-            ble_send_slot0_metrics();
+
+            appMetResults.cpu_perc_util = 100.0*cpuBusyMs/(cpuBusyMs + cpuIdleMs);
+            cpuBusyMs = 0;
+            cpuIdleMs = 0;
+
             // Store metrics
             ringbuffer_seek(&rbEcgMet, ECG_MET_VALID_LEN);
             ringbuffer_seek(&rbEcgMaskMet, ECG_MET_VALID_LEN);
-            lastTickUs = ns_us_ticker_read(&timerCfg) - lastTickUs;
-            ns_lp_printf("Metrics Time: %d\n", lastTickUs);
-            doneStep = true;
+            deltaUs = ns_us_ticker_read(&timerCfg) - tickUs;
+            appMetResults.arrhythmia_ips = 1000000.0/deltaUs;
+
+            // Broadcast metrics
+            send_slot0_metrics();
+            send_uio_state();
+            ns_lp_printf("<METRICS Time: %d (err=%d) >\n", deltaUs/1000, err);
         }
-        lastTickUs = ns_us_ticker_read(&timerCfg);
 
-        // Target 100 ms (delay if faster)
-        if (lastTickUs < 100000) {
-            delayUs = 100000 - lastTickUs;
+        ///////////////////////////////////////////////
+        // TIO SLOT BLOCK
+        ///////////////////////////////////////////////
+        send_slot0_signals();
+
+        ///////////////////////////////////////////////
+        // DELAY BLOCK
+        ///////////////////////////////////////////////
+
+        // Try to maintain 100ms loop to not back up Tileio
+        deltaUs = ns_us_ticker_read(&timerCfg);
+        cpuBusyMs += deltaUs/1000;
+        if (deltaUs < 100000) {
+            delayUs = 100000 - deltaUs;
+            cpuIdleMs += delayUs/1000;
             vTaskDelay(pdMS_TO_TICKS(delayUs/1000));
-        } else{
-            ns_lp_printf("Delay: 0 ms!!!!\n");
-
         }
     }
 }
 
 void setup_task(void *pvParameters) {
-    ns_ble_pre_init();
-    xTaskCreate(RadioTask, "RadioTask", 512, 0, 3, &radioTaskHandle);
-    // xTaskCreate(SensorTask, "SensorTask", 512, 0, 3, &sensorTaskHandle);
-    xTaskCreate(Slot0Task, "Slot0Task", 2560, 0, 1, &slot0TaskHandle);
+    xTaskCreate(TioTask, "TioTask", 512, NULL, 3, &tioTaskHandle);
+    xTaskCreate(SensorTask, "SensorTask", 256, 0, 3, &sensorTaskHandle);
+    xTaskCreate(ProcessTask, "ProcessTask", 3328, 0, 1, &processTaskHandle);
     vTaskSuspend(NULL);
+    send_uio_state();
     while (1) { };
 }
 
 int main(void) {
+
+    sensorCtx.inputSource = appState.inputSource;
+    nsPwrCfg.eAIPowerMode = appState.speedMode ? NS_MAXIMUM_PERF : NS_MINIMUM_PERF;
+
     NS_TRY(ns_core_init(&nsCoreCfg), "Core Init failed.\b");
     NS_TRY(ns_power_config(&nsPwrCfg), "Power Init Failed\n");
     NS_TRY(ns_i2c_interface_init(&nsI2cCfg, I2C_SPEED_HZ), "I2C Init Failed\n");
     NS_TRY(ns_timer_init(&timerCfg), "Timer0 Init failed.\n");
-
     // NS_TRY(ns_timer_init(&slot1TimerCfg), "Timer1 Init failed.\n");
     NS_TRY(ns_peripheral_button_init(&nsBtnCfg), "Button Init failed.\n");
     am_devices_led_array_init(am_bsp_psLEDs, AM_BSP_NUM_LEDS);
-    am_devices_led_array_out(am_bsp_psLEDs, AM_BSP_NUM_LEDS, 7);
+    am_devices_led_array_out(am_bsp_psLEDs, AM_BSP_NUM_LEDS, appState.ledState);
     NS_TRY(ledstick_init(&nsI2cCfg, LEDSTICK_ADDR), "Led Stick Init Failed\n");
     NS_TRY(sensor_init(&sensorCtx), "Sensor Init Failed\n");
+
+    tioCtx.slot_update_cb = &received_slot_data;
+    tioCtx.uio_update_cb = &received_uio_state;
+    NS_TRY(tio_init(&tioCtx), "TIO Init Failed\n");
 
     NS_TRY(tflm_init(), "TFLM Init Failed\n");
     NS_TRY(ecg_denoise_init(&ecgDenModelCtx), "ECG Segmentation Init Failed\n");
     NS_TRY(ecg_segmentation_init(&ecgSegModelCtx), "ECG Segmentation Init Failed\n");
+    NS_TRY(ecg_arrhythmia_init(&ecgArrModelCtx), "ECG Arrhythmia Init Failed\n");
     NS_TRY(metrics_init(&metricsCfg), "Metrics Init Failed\n");
-
     sensor_start(&sensorCtx);
 
     ns_itm_printf_enable();

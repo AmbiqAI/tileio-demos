@@ -49,7 +49,7 @@ metrics_capture_ecg(
     float32_t *ecg,
     uint16_t *ecgMask,
     size_t len,
-    metrics_ecg_results_t *results
+    metrics_app_results_t *results
 ) {
     uint32_t err = 0;
     uint16_t peakVal, beatVal;

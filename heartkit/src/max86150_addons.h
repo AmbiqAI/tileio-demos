@@ -11,6 +11,10 @@
 #ifndef __MAX86150_ADDONS_H
 #define __MAX86150_ADDONS_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include "ns_max86150_driver.h"
 
 typedef struct {
@@ -31,5 +35,9 @@ typedef struct {
     uint8_t ecgIaGain;
     uint8_t ecgPgaGain;
 } max86150_config_t;
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif // __MAX86150_ADDONS_H

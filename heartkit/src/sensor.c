@@ -22,8 +22,21 @@
 #define RESET_DELAY_US (10000)
 
 uint32_t
+sensor_is_valid(sensor_context_t *ctx) {
+    uint32_t sensorId = max86150_get_part_id(ctx->maxCtx);
+    if (sensorId != MAX86150_PART_ID_VAL) {
+        return 0;
+    }
+    return 1;
+}
+
+uint32_t
 sensor_init(sensor_context_t *ctx) {
-    return 0;
+    ns_lp_printf("Initializing sensor\n");
+    if (sensor_is_valid(ctx) == 0) {
+        ctx->initialized = false;
+        return 1;
+    }
     max86150_powerup(ctx->maxCtx);
     ns_delay_us(RESET_DELAY_US);
     max86150_reset(ctx->maxCtx);
@@ -46,6 +59,7 @@ sensor_init(sensor_context_t *ctx) {
     max86150_set_ecg_pga_gain(ctx->maxCtx, ctx->maxCfg->ecgPgaGain);
     max86150_powerup(ctx->maxCtx);
     sensor_stop(ctx);
+    ctx->initialized = true;
     return 0;
 }
 
@@ -64,9 +78,9 @@ sensor_stop(sensor_context_t *ctx) {
 
 uint32_t
 sensor_dummy_data(sensor_context_t *ctx, uint32_t reqSamples) {
-    static size_t _dummy_slot_idxs[4] = { 0, 0, 0, 0 };
+    static size_t _dummy_slot_idxs[MAX86150_NUM_SLOTS] = {0};
     uint32_t numSamples = reqSamples;
-    uint32_t ptSel = ctx->input_source;
+    uint32_t ptSel = ctx->inputSource;
     size_t ptStart = 0;
     size_t ptEnd = 0;
     size_t dummyIdx = 0;
@@ -75,7 +89,7 @@ sensor_dummy_data(sensor_context_t *ctx, uint32_t reqSamples) {
         for (size_t j = 0; j < ctx->maxCfg->numSlots; j++) {
             idx = ctx->maxCfg->numSlots * i + j;
             dummyIdx = _dummy_slot_idxs[j];
-            if (ctx->maxCfg->fifoSlotConfigs[j] == Max86150SlotEcg) {
+            if (ctx->maxCfg->fifoSlotConfigs[j] == Max86150SlotEcg) { // Max86150SlotEcg
                 ptStart = PTS_ECG_DATA_LEN * ptSel;
                 ptEnd = ptStart + PTS_ECG_DATA_LEN;
                 if (dummyIdx < ptStart || dummyIdx >= ptEnd) {
@@ -94,10 +108,13 @@ sensor_dummy_data(sensor_context_t *ctx, uint32_t reqSamples) {
 
 uint32_t
 sensor_capture_data(sensor_context_t *ctx) {
-    uint32_t numSamples = SENSOR_NOM_REFRESH_LEN;
-    // uint32_t numSamples = max86150_read_fifo_samples(ctx->maxCtx, ctx->buffer, ctx->maxCfg->fifoSlotConfigs, ctx->maxCfg->numSlots);
-    // if (ctx->input_source < NUM_INPUT_PTS) {
+    if (!ctx->initialized || sensor_is_valid(ctx) == 0){
+        sensor_init(ctx);
+        return 0;
+    }
+    uint32_t numSamples = max86150_read_fifo_samples(ctx->maxCtx, ctx->buffer, ctx->maxCfg->fifoSlotConfigs, ctx->maxCfg->numSlots);
+    if (ctx->inputSource < NUM_INPUT_PTS) {
         return sensor_dummy_data(ctx, numSamples);
-    // }
+    }
     return numSamples;
 }

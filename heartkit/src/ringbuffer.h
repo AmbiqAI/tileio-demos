@@ -11,6 +11,11 @@
 #ifndef __RINGBUFFER_H
 #define __RINGBUFFER_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+
 #include <stdint.h>
 
 typedef struct {
@@ -103,7 +108,6 @@ ringbuffer_seek(rb_config_t *ctx, size_t len);
  */
 size_t
 ringbuffer_transfer(rb_config_t *src, rb_config_t *dst, size_t len);
-#endif // __RINGBUFFER_H
 
 /**
  * @brief Flush ringbuffer
@@ -113,3 +117,9 @@ ringbuffer_transfer(rb_config_t *src, rb_config_t *dst, size_t len);
  */
 size_t
 ringbuffer_flush(rb_config_t *ctx);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif // __RINGBUFFER_H

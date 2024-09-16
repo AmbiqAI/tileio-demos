@@ -11,6 +11,8 @@
 #include "physiokit/pk_ppg.h"
 // Local
 #include "constants.h"
+#include "ecg_arrhythmia.h"
+#include "ecg_arrhythmia_flatbuffer.h"
 #include "ecg_segmentation.h"
 #include "ecg_segmentation_flatbuffer.h"
 #include "ecg_denoise.h"
@@ -21,7 +23,7 @@
 // EVB Configuration
 ///////////////////////////////////////////////////////////////////////////////
 
-const ns_power_config_t nsPwrCfg = {
+ns_power_config_t nsPwrCfg = {
     .api = &ns_power_V1_0_0,
     .eAIPowerMode = NS_MAXIMUM_PERF,
     .bNeedAudAdc = false,
@@ -119,7 +121,8 @@ sensor_context_t sensorCtx = {
     .maxCtx = &maxCtx,
     .maxCfg = &maxCfg,
     .buffer = max86150Buffer,
-    .input_source = 0
+    .initialized = false,
+    .inputSource = 0
 };
 
 
@@ -187,6 +190,25 @@ rb_config_t rbEcgDen = {
 };
 
 ///////////////////////////////////////////////////////////////////////////////
+// ECG Arrhythmia Configuration
+///////////////////////////////////////////////////////////////////////////////
+
+float32_t ecgArrScratch[ECG_ARR_WINDOW_LEN];
+float32_t ecgArrInout[ECG_ARR_WINDOW_LEN];
+
+static constexpr int arrTensorArenaSize = 1024 * ECG_ARR_MODEL_SIZE_KB;
+alignas(16) static uint8_t arrTensorArena[arrTensorArenaSize];
+tf_model_context_t ecgArrModelCtx = {
+    .arenaSize = arrTensorArenaSize,
+    .arena = arrTensorArena,
+    .buffer = ecg_arrhythmia_flatbuffer,
+    .model = nullptr,
+    .input = nullptr,
+    .output = nullptr,
+    .interpreter = nullptr,
+};
+
+///////////////////////////////////////////////////////////////////////////////
 // ECG Segmentation Configuration
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -206,6 +228,15 @@ tf_model_context_t ecgSegModelCtx = {
     .interpreter = nullptr,
 };
 
+static float32_t ecgRawSegBuffer[ECG_SEG_BUF_LEN];
+rb_config_t rbEcgRawSeg = {
+    .buffer = (void *)ecgRawSegBuffer,
+    .dlen = sizeof(float32_t),
+    .size = ECG_SEG_BUF_LEN,
+    .head = 0,
+    .tail = 0,
+};
+
 static float32_t ecgSegBuffer[ECG_SEG_BUF_LEN];
 rb_config_t rbEcgSeg = {
     .buffer = (void *)ecgSegBuffer,
@@ -215,6 +246,16 @@ rb_config_t rbEcgSeg = {
     .tail = 0,
 };
 
+static float32_t ecgPkPeakState[4 * ECG_SEG_WINDOW_LEN];
+ecg_peak_f32_t ecgPkPeakCtx = {
+    .qrsWin = 0.1,
+    .avgWin = 1.0,
+    .qrsPromWeight = 1.5,
+    .qrsMinLenWeight = 0.4,
+    .qrsDelayWin = 0.3,
+    .sampleRate = 100,
+    .state = ecgPkPeakState
+};
 
 ///////////////////////////////////////////////////////////////////////////////
 // Shared Metrics Configuration
@@ -253,90 +294,20 @@ float32_t ecgDenMetData[ECG_MET_WINDOW_LEN];
 uint16_t ecgMaskMetData[ECG_MET_WINDOW_LEN];
 
 hrv_td_metrics_t ecgHrvMetrics;
-metrics_ecg_results_t ecgMetResults = {
+metrics_app_results_t appMetResults = {
     .hr = 0,
     .hrv = 0,
+    .denoise_cossim = 0,
+    .arrhythmia_label = 0,
     .denoise_ips = 0,
     .segment_ips = 0,
-    .denoise_cossim = 0
+    .arrhythmia_ips = 0,
+    .cpu_perc_util = 0,
 };
-
 
 ///////////////////////////////////////////////////////////////////////////////
-// BLE Configuration
+// TileIO Configuration
 ///////////////////////////////////////////////////////////////////////////////
-
-static uint32_t webbleWSFBufferPool[WEBBLE_WSF_BUFFER_SIZE];
-static wsfBufPoolDesc_t webbleBufferDescriptors[WEBBLE_WSF_BUFFER_POOLS] = {
-    {16, 8}, // 16 bytes, 8 buffers
-    {32, 4},
-    {64, 6},
-    {512, 14}};
-
-static ns_ble_pool_config_t bleWsfBuffers = {
-    .pool = webbleWSFBufferPool,
-    .poolSize = sizeof(webbleWSFBufferPool),
-    .desc = webbleBufferDescriptors,
-    .descNum = WEBBLE_WSF_BUFFER_POOLS
-};
-
-tio_uio_state_t uioState = {
-    .io0 = 0,
-    .io1 = 0,
-    .io2 = 0,
-    .io3 = 0,
-    .io4 = 0,
-    .io5 = 0,
-    .io6 = 0,
-    .io7 = 0,
-};
-static uint8_t bleSlot0SigBuffer[TIO_BLE_SLOT_SIG_BUF_LEN] = {0};
-static uint8_t bleSlot1SigBuffer[TIO_BLE_SLOT_SIG_BUF_LEN] = {0};
-static uint8_t bleSlot2SigBuffer[TIO_BLE_SLOT_SIG_BUF_LEN] = {0};
-static uint8_t bleSlot3SigBuffer[TIO_BLE_SLOT_SIG_BUF_LEN] = {0};
-
-static uint8_t bleSlot0MetBuffer[TIO_BLE_SLOT_MET_BUF_LEN] = {0};
-static uint8_t bleSlot1MetBuffer[TIO_BLE_SLOT_MET_BUF_LEN] = {0};
-static uint8_t bleSlot2MetBuffer[TIO_BLE_SLOT_MET_BUF_LEN] = {0};
-static uint8_t bleSlot3MetBuffer[TIO_BLE_SLOT_MET_BUF_LEN] = {0};
-
-static uint8_t bleUioBuffer[TIO_BLE_UIO_BUF_LEN] = {0};
-
-static ns_ble_service_t bleService;
-static ns_ble_characteristic_t bleSlot0SigChar;
-static ns_ble_characteristic_t bleSlot1SigChar;
-static ns_ble_characteristic_t bleSlot2SigChar;
-static ns_ble_characteristic_t bleSlot3SigChar;
-static ns_ble_characteristic_t bleSlot0MetChar;
-static ns_ble_characteristic_t bleSlot1MetChar;
-static ns_ble_characteristic_t bleSlot2MetChar;
-static ns_ble_characteristic_t bleSlot3MetChar;
-
-static ns_ble_characteristic_t bleUioChar;
-
-tio_ble_context_t bleCtx = {
-    .pool = &bleWsfBuffers,
-    .service = &bleService,
-    .slot0SigChar = &bleSlot0SigChar,
-    .slot1SigChar = &bleSlot1SigChar,
-    .slot2SigChar = &bleSlot2SigChar,
-    .slot3SigChar = &bleSlot3SigChar,
-    .slot0MetChar = &bleSlot0MetChar,
-    .slot1MetChar = &bleSlot1MetChar,
-    .slot2MetChar = &bleSlot2MetChar,
-    .slot3MetChar = &bleSlot3MetChar,
-    .uioChar = &bleUioChar,
-    .slot0SigBuffer = bleSlot0SigBuffer,
-    .slot1SigBuffer = bleSlot1SigBuffer,
-    .slot2SigBuffer = bleSlot2SigBuffer,
-    .slot3SigBuffer = bleSlot3SigBuffer,
-    .slot0MetBuffer = bleSlot0MetBuffer,
-    .slot1MetBuffer = bleSlot1MetBuffer,
-    .slot2MetBuffer = bleSlot2MetBuffer,
-    .slot3MetBuffer = bleSlot3MetBuffer,
-    .uioBuffer = bleUioBuffer
-};
-
 
 static float32_t ecgRawTxBuffer[ECG_TX_BUF_LEN];
 rb_config_t rbEcgRawTx = {
@@ -382,3 +353,12 @@ rb_config_t rbEcgMaskTx = {
 //     {8, 207,   0, 193},
 //     {9, 207,   0, 193},
 // };
+
+app_state_t appState = {
+    .inputSource = 0,
+    .noiseLevel = 0,
+    .speedMode = 0,
+    .denoiseMode = DenoiseModeAi,
+    .segMode = SegmentationModeAi,
+    .ledState = 0,
+};

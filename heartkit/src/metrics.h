@@ -25,12 +25,15 @@ typedef struct {
  *
  */
 typedef struct {
-    float32_t hr;  // Heart rate (bpm)
-    float32_t hrv;  // Heart rate variability (ms)
+    float32_t hr;
+    float32_t hrv;
+    float32_t denoise_cossim;
+    float32_t arrhythmia_label;
     float32_t denoise_ips;
     float32_t segment_ips;
-    float32_t denoise_cossim;
-} metrics_ecg_results_t;
+    float32_t arrhythmia_ips;
+    float32_t cpu_perc_util;
+} metrics_app_results_t;
 
 
 /**
@@ -86,7 +89,7 @@ metrics_capture_ecg(
     float32_t *ecg,
     uint16_t *ecgMask,
     size_t len,
-    metrics_ecg_results_t *results
+    metrics_app_results_t *results
 );
 
 #endif // __PK_METRICS_H

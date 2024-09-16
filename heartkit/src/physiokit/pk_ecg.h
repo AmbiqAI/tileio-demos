@@ -34,7 +34,7 @@ uint32_t
 pk_ecg_square_filter_mask(uint32_t *rrIntervals, uint32_t numPeaks, uint8_t *mask, uint32_t sampleRate, float32_t minRR, float32_t maxRR);
 
 uint32_t
-pk_ecg_find_peaks_f32(ecg_peak_f32_t *ctx, float32_t *ecg, uint32_t ecgLen, uint32_t *peaks);
+pk_ecg_find_peaks_f32(ecg_peak_f32_t *ctx, float32_t *ecg, uint32_t ecgLen, uint32_t *peaks, uint16_t *mask);
 
 uint32_t
 pk_ecg_compute_rr_intervals(uint32_t *peaks, uint32_t numPeaks, uint32_t *rrIntervals);

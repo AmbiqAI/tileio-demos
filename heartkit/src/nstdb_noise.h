@@ -19,11 +19,13 @@ extern "C" {
 #include <stdint.h>
 
 uint32_t
-nstdb_add_em_noise(float32_t *ecg, size_t len, float32_t ratio);
+nstdb_add_em_noise(float32_t *pSrc, float32_t *pDst, size_t len, float32_t ratio);
 uint32_t
-nstdb_add_ma_noise(float32_t *ecg, size_t len, float32_t ratio);
+nstdb_add_ma_noise(float32_t *pSrc, float32_t *pDst, size_t len, float32_t ratio);
 uint32_t
-nstdb_add_bw_noise(float32_t *ecg, size_t len, float32_t ratio);
+nstdb_add_bw_noise(float32_t *pSrc, float32_t *pDst, size_t len, float32_t ratio);
+uint32_t
+nstdb_add_noises(float32_t *pSrc, float32_t *pDst, size_t len, int32_t noiseLevel, float32_t scale);
 
 #ifdef __cplusplus
 }

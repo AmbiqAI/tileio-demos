@@ -25,18 +25,19 @@
 // Sensor Configuration
 ///////////////////////////////////////////////////////////////////////////////
 
-#define NUM_INPUT_PTS (4)
-#define PTS_ECG_DATA_LEN (6000)
+#define NUM_INPUT_PTS (5)
+#define PTS_ECG_DATA_LEN (2000)
 #define SENSOR_RATE (200)
 #define SENSOR_ECG_SLOT (0)
 #define SENSOR_BUF_LEN (4 * 64) // Double FIFO depth
-#define SENSOR_NOM_REFRESH_LEN (5)
+#define SENSOR_NOM_REFRESH_LEN (20)
+#define MAX86150_PART_ID_VAL (0x1E)
 
 ///////////////////////////////////////////////////////////////////////////////
 // Preprocess Configuration
 ///////////////////////////////////////////////////////////////////////////////
 
-#define NORM_STD_EPS (0.1)
+#define NORM_STD_EPS (0.001)
 
 #define ECG_SOS_LEN (9)
 #define ECG_SAMPLE_RATE (100)
@@ -67,12 +68,29 @@
 
 // ECG Segmentation Classes
 #define ECG_SEG_NONE (0)
-#define ECG_SEG_PWAVE (1) // 3
-#define ECG_SEG_QRS (2) // 1
-#define ECG_SEG_TWAVE (3)  // 3
+#define ECG_SEG_PWAVE (1)
+#define ECG_SEG_QRS (2)
+#define ECG_SEG_TWAVE (3)
 
 ///////////////////////////////////////////////////////////////////////////////
-// TIO BLE Mask Format
+// ECG Arrhythmia Configuration
+///////////////////////////////////////////////////////////////////////////////
+
+#define ECG_ARR_MODEL_SIZE_KB (80)
+#define ECG_ARR_THRESHOLD (0.5)
+#define ECG_ARR_WINDOW_LEN (500)
+#define ECG_ARR_PAD_LEN (0)
+#define ECG_ARR_VALID_LEN (ECG_ARR_WINDOW_LEN - 2 * ECG_ARR_PAD_LEN)
+#define ECG_ARR_BUF_LEN (2 * ECG_ARR_WINDOW_LEN)
+
+#define ECG_ARR_INCONCLUSIVE (0)
+#define ECG_ARR_SR (1)
+#define ECG_ARR_SB (2)
+#define ECG_ARR_AFIB (3)
+#define ECG_ARR_GSVT (4)
+
+///////////////////////////////////////////////////////////////////////////////
+// TIO Mask Format
 ///////////////////////////////////////////////////////////////////////////////
 
 // [5-0] : 6-bit segmentation
@@ -148,52 +166,31 @@
 #define ECG_TX_BUF_LEN ECG_SEG_BUF_LEN
 
 ///////////////////////////////////////////////////////////////////////////////
-// BLE Configuration
+// Tileio Configuration
 ///////////////////////////////////////////////////////////////////////////////
 
-#define TIO_BLE_SLOT_SIG_BUF_LEN (242)
-#define TIO_BLE_SLOT_MET_BUF_LEN (242)
-#define TIO_BLE_UIO_BUF_LEN (8)
+#define TIO_BLE_ENABLED true // Enable Tileio BLE
+#define TIO_USB_ENABLED true // Enable Tileio USB
 
-#define TIO_SLOT_SVC_UUID "eecb7db88b2d402cb995825538b49328"
-#define TIO_SLOT0_SIG_CHAR_UUID "5bca2754ac7e4a27a1270f328791057a"
-#define TIO_SLOT1_SIG_CHAR_UUID "45415793a0e94740bca4ce90bd61839f"
-#define TIO_SLOT2_SIG_CHAR_UUID "dd19792c63f1420f920cc58bada8efb9"
-#define TIO_SLOT3_SIG_CHAR_UUID "f1f691580bd64cab90a8528baf74cc74"
+#define TIO_SLOT0_NUM_CH (2)
+#define TIO_SLOT0_SIG_NUM_VALS (10)
+#define TIO_SLOT0_FS (ECG_SAMPLE_RATE / TIO_SLOT0_SIG_NUM_VALS)
+#define TIO_SLOT0_SCALE (1000)
 
-#define TIO_SLOT0_MET_CHAR_UUID "44a3a7b8d7c849329a10d99dd63775ae"
-#define TIO_SLOT1_MET_CHAR_UUID "e64fa683462848c5bede824aaa7c3f5b"
-#define TIO_SLOT2_MET_CHAR_UUID "b9d28f5365f04392afbcc602f9dc3c8b"
-#define TIO_SLOT3_MET_CHAR_UUID "917c9eb43dbc4cb3bba2ec4e288083f4"
+#define TIO_SLOT1_NUM_CH (1)
+#define TIO_SLOT1_SIG_NUM_VALS (50)
+#define TIO_SLOT1_FS (ECG_SAMPLE_RATE / TIO_SLOT1_SIG_NUM_VALS)
+#define TIO_SLOT1_SCALE (1000)
 
-#define TIO_UIO_CHAR_UUID "b9488d48069b47f794f0387f7fbfd1fa"
+#define TIO_SLOT2_NUM_CH (1)
+#define TIO_SLOT2_SIG_NUM_VALS (50)
+#define TIO_SLOT2_FS (ECG_SAMPLE_RATE / TIO_SLOT2_SIG_NUM_VALS)
+#define TIO_SLOT2_SCALE (1000)
 
-#define BLE_NUM_CHARS (2+1)
-
-#define BLE_SLOT0_NUM_CH (2)
-#define BLE_SLOT0_SIG_NUM_VALS (25)
-#define BLE_SLOT0_FS (ECG_SAMPLE_RATE / BLE_SLOT0_SIG_NUM_VALS)
-#define BLE_SLOT0_SCALE (1000)
-
-#define BLE_SLOT1_NUM_CH (1)
-#define BLE_SLOT1_SIG_NUM_VALS (50)
-#define BLE_SLOT1_FS (ECG_SAMPLE_RATE / BLE_SLOT1_SIG_NUM_VALS)
-#define BLE_SLOT1_SCALE (1000)
-
-#define BLE_SLOT2_NUM_CH (1)
-#define BLE_SLOT2_SIG_NUM_VALS (50)
-#define BLE_SLOT2_FS (ECG_SAMPLE_RATE / BLE_SLOT2_SIG_NUM_VALS)
-#define BLE_SLOT2_SCALE (1000)
-
-#define BLE_SLOT3_NUM_CH (1)
-#define BLE_SLOT3_SIG_NUM_VALS (50)
-#define BLE_SLOT3_FS (ECG_SAMPLE_RATE / BLE_SLOT3_SIG_NUM_VALS)
-#define BLE_SLOT3_SCALE (1000)
-
-// WSF buffer pools are a bit of black magic. More development needed.
-#define WEBBLE_WSF_BUFFER_POOLS 4
-#define WEBBLE_WSF_BUFFER_SIZE \
-    (WEBBLE_WSF_BUFFER_POOLS * 16 + 16 * 8 + 32 * 4 + 64 * 6 + 280 * 14) / sizeof(uint32_t)
+#define TIO_SLOT3_NUM_CH (1)
+#define TIO_SLOT3_SIG_NUM_VALS (50)
+#define TIO_SLOT3_FS (ECG_SAMPLE_RATE / TIO_SLOT3_SIG_NUM_VALS)
+#define TIO_SLOT3_SCALE (1000)
 
 
 ///////////////////////////////////////////////////////////////////////////////

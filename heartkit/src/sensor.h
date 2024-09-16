@@ -28,7 +28,8 @@ typedef struct {
     max86150_context_t *maxCtx;
     max86150_config_t *maxCfg;
     uint32_t *buffer;
-    uint8_t input_source;
+    uint8_t initialized;
+    uint8_t inputSource;
 } sensor_context_t;
 
 /**

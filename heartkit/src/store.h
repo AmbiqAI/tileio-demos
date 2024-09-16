@@ -18,10 +18,10 @@
 #include "ns_i2c.h"
 #include "ns_peripherals_button.h"
 #include "ns_peripherals_power.h"
-#include "ns_ble.h"
 // PhysioKit
 #include "physiokit/pk_ppg.h"
 #include "physiokit/pk_hrv.h"
+#include "physiokit/pk_ecg.h"
 // Locals
 #include "constants.h"
 #include "ecg_segmentation.h"
@@ -29,50 +29,6 @@
 #include "metrics.h"
 #include "ringbuffer.h"
 
-typedef union {
-    struct {
-        uint8_t io0;
-        uint8_t io1;
-        uint8_t io2;
-        uint8_t io3;
-        uint8_t io4;
-        uint8_t io5;
-        uint8_t io6;
-        uint8_t io7;
-    } __attribute__((packed));
-    uint64_t bytes;
-} tio_uio_state_t;
-
-
-typedef struct {
-    ns_ble_pool_config_t *pool;
-    ns_ble_service_t *service;
-
-    ns_ble_characteristic_t *slot0SigChar;
-    ns_ble_characteristic_t *slot1SigChar;
-    ns_ble_characteristic_t *slot2SigChar;
-    ns_ble_characteristic_t *slot3SigChar;
-
-    ns_ble_characteristic_t *slot0MetChar;
-    ns_ble_characteristic_t *slot1MetChar;
-    ns_ble_characteristic_t *slot2MetChar;
-    ns_ble_characteristic_t *slot3MetChar;
-
-    ns_ble_characteristic_t *uioChar;
-
-    void *slot0SigBuffer;
-    void *slot1SigBuffer;
-    void *slot2SigBuffer;
-    void *slot3SigBuffer;
-
-    void *slot0MetBuffer;
-    void *slot1MetBuffer;
-    void *slot2MetBuffer;
-    void *slot3MetBuffer;
-
-    uint8_t *uioBuffer;
-
-} tio_ble_context_t;
 
 enum HeartRhythm { HeartRhythmNormal, HeartRhythmAfib, HeartRhythmAfut };
 typedef enum HeartRhythm HeartRhythm;
@@ -87,15 +43,33 @@ enum HeartSegment { HeartSegmentNormal, HeartSegmentPWave, HeartSegmentQrs, Hear
 typedef enum HeartSegment HeartSegment;
 
 
+enum AppFsm { AppFsmIdle, AppFsmSleep, AppFsmSensor, AppFsmDenoise, AppFsmSegmentation, AppFsmMetrics };
+typedef enum AppFsm AppFsm;
+
+enum DenoiseMode { DenoiseModeOff, DenoiseModeDsp, DenoiseModeAi };
+typedef enum DenoiseMode DenoiseMode;
+
+enum SegmentationMode { SegmentationModeOff, SegmentationModeDsp, SegmentationModeAi };
+typedef enum SegmentationMode SegmentationMode;
+
+typedef struct {
+    uint8_t inputSource; // PT0, PT1, PT2, ..., Live
+    uint8_t noiseLevel; // 0 - 99
+    uint8_t speedMode;  // 0: LPM, 1: HPM
+    uint8_t denoiseMode; // 0: off, 1: dsp, 2: ai
+    uint8_t segMode;  // 0: off, 1: dsp, 2: ai
+    uint8_t ledState; // use 3 bits to represent 3 LEDs
+} app_state_t;
+
 ///////////////////////////////////////////////////////////////////////////////
 // EVB Configuration
 ///////////////////////////////////////////////////////////////////////////////
 
-extern const ns_power_config_t nsPwrCfg;
+extern ns_power_config_t nsPwrCfg;
 extern ns_core_config_t nsCoreCfg;
 extern ns_i2c_config_t nsI2cCfg;
 extern ns_button_config_t nsBtnCfg;
-extern tio_uio_state_t uioState;
+
 
 ///////////////////////////////////////////////////////////////////////////////
 // Sensor Configuration
@@ -124,6 +98,14 @@ extern rb_config_t rbEcgDen;
 
 
 ///////////////////////////////////////////////////////////////////////////////
+// ECG Arrhythmia Configuration
+///////////////////////////////////////////////////////////////////////////////
+
+extern tf_model_context_t ecgArrModelCtx;
+extern float32_t ecgArrScratch[ECG_ARR_WINDOW_LEN];
+extern float32_t ecgArrInout[ECG_ARR_WINDOW_LEN];
+
+///////////////////////////////////////////////////////////////////////////////
 // ECG Segmentation Configuration
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -131,7 +113,10 @@ extern tf_model_context_t ecgSegModelCtx;
 extern float32_t ecgSegScratch[ECG_SEG_WINDOW_LEN];
 extern float32_t ecgSegInout[ECG_SEG_WINDOW_LEN];
 extern uint16_t ecgSegMask[ECG_SEG_WINDOW_LEN];
+extern rb_config_t rbEcgRawSeg;
 extern rb_config_t rbEcgSeg;
+extern ecg_peak_f32_t ecgPkPeakCtx;
+
 
 ///////////////////////////////////////////////////////////////////////////////
 // Shared Metrics Configuration
@@ -155,23 +140,23 @@ extern uint16_t ecgMaskMetData[ECG_MET_WINDOW_LEN];
 
 extern hrv_td_metrics_t ecgHrvMetrics;
 
-extern metrics_ecg_results_t ecgMetResults;
+extern metrics_app_results_t appMetResults;
 
 
 ///////////////////////////////////////////////////////////////////////////////
-// BLE Configuration
+// TILEIO Configuration
 ///////////////////////////////////////////////////////////////////////////////
-
-extern tio_ble_context_t bleCtx;
 
 extern rb_config_t rbEcgRawTx;
 extern rb_config_t rbEcgDenTx;
 extern rb_config_t rbEcgMaskTx;
+
 
 ///////////////////////////////////////////////////////////////////////////////
 // APP Configuration
 ///////////////////////////////////////////////////////////////////////////////
 
 extern ns_timer_config_t timerCfg;
+extern app_state_t appState;
 
 #endif // __APP_STORE_H

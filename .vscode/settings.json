@@ -5,7 +5,13 @@
         "stimulus.h": "c",
         "stack": "cpp",
         "stdint.h": "c",
-        "math.h": "c"
+        "math.h": "c",
+        "ns_ble.h": "c",
+        "ns_i2c.h": "c",
+        "usb_descriptors.h": "c",
+        "ringbuffer.h": "c",
+        "freertos.h": "c",
+        "max86150_addons.h": "c"
     },
     "makefile.makeDirectory": "./",
     "makefile.launchConfigurations": [

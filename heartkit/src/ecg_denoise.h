@@ -32,9 +32,8 @@ ecg_denoise_init(tf_model_context_t *ctx);
  * @param ctx TFLM model context
  * @param ecgIn ECG input
  * @param ecgOut Denoised ECG output
- * @param ecgMask ECG mask
  * @param padLen Padding length
- * @param threshold Segmentation threshold
+ * @param threshold Threshold
  * @return uint32_t
  */
 uint32_t

@@ -1,11 +1,11 @@
 /**
  * @file ecg_segmentation.cc
  * @author Adam Page (adam.page@ambiq.com)
- * @brief TFLM ECG segmentation
+ * @brief ECG segmentation
  * @version 1.0
  * @date 2023-12-13
  *
- * @copyright Copyright (c) 2023
+ * @copyright Copyright (c) 2024
  *
  */
 #include "arm_math.h"
@@ -28,6 +28,7 @@
 #include "physiokit/pk_hrv.h"
 #include "store.h"
 #include "constants.h"
+#include "physiokit/pk_ecg.h"
 #include "ecg_segmentation.h"
 
 uint32_t
@@ -36,35 +37,57 @@ ecg_segmentation_init(tf_model_context_t *ctx) {
     size_t bytesUsed;
     TfLiteStatus allocateStatus;
 
+    // Initialize TFLM backend
     tflm_init_model(ctx);
 
+    // Load model
     ctx->model = tflite::GetModel(ctx->buffer);
-
     if (ctx->model->version() != TFLITE_SCHEMA_VERSION) {
         TF_LITE_REPORT_ERROR(ctx->reporter, "Schema mismatch: given=%d != expected=%d.", ctx->model->version(), TFLITE_SCHEMA_VERSION);
         return 1;
     }
-    if (ctx->interpreter != nullptr) {
-        ctx->interpreter->Reset();
-    }
-    static tflite::MicroInterpreter static_interpreter(ctx->model, *(ctx->resolver), ctx->arena, ctx->arenaSize, nullptr, ctx->profiler);
 
+    // Initialize interpreter
+    if (ctx->interpreter != nullptr) { ctx->interpreter->Reset(); }
+    static tflite::MicroInterpreter static_interpreter(ctx->model, *(ctx->resolver), ctx->arena, ctx->arenaSize, nullptr, ctx->profiler);
     ctx->interpreter = &static_interpreter;
 
+    // Allocate tensors
     allocateStatus = ctx->interpreter->AllocateTensors();
     if (allocateStatus != kTfLiteOk) {
         TF_LITE_REPORT_ERROR(ctx->reporter, "AllocateTensors() failed");
         return 1;
     }
 
+    // Check arena size
     bytesUsed = ctx->interpreter->arena_used_bytes();
     if (bytesUsed > ctx->arenaSize) {
         TF_LITE_REPORT_ERROR(ctx->reporter, "Arena mismatch: given=%d < expected=%d bytes.", ctx->arenaSize, bytesUsed);
         return 1;
     }
 
+    // Store input and output pointers (assume single input/output tensor)
     ctx->input = ctx->interpreter->input(0);
     ctx->output = ctx->interpreter->output(0);
+    return 0;
+}
+
+uint32_t
+ecg_physiokit_segmentation_inference(float32_t *data, uint16_t *segMask, uint32_t padLen) {
+    uint32_t numPeaks;
+    uint16_t qos = ECG_QOS_GOOD_THRESH;
+    numPeaks = pk_ecg_find_peaks_f32(&ecgPkPeakCtx, data, ECG_SEG_WINDOW_LEN, peaksMetrics, segMask);
+    for (size_t i = 0; i < ECG_SEG_WINDOW_LEN; i++) {
+        segMask[i] = segMask[i] > 0 ? ECG_SEG_QRS : ECG_SEG_NONE;
+        segMask[i] |= ((qos & SIG_MASK_QOS_MASK) << SIG_MASK_QOS_OFFSET);
+    }
+    ns_lp_printf("ECG SEG PK numPeaks: %d\n", numPeaks);
+    for (size_t i = 0; i < numPeaks; i++) {
+        ns_lp_printf("ECG SEG PK %d: %d\n", i, peaksMetrics[i]);
+        segMask[peaksMetrics[i]] |= (ECG_FID_PEAK_QRS << ECG_MASK_FID_PEAK_OFFSET);
+    }
+    // ecg_segmentation_extract_fiducials(segMask, data);
+
     return 0;
 }
 
@@ -77,7 +100,7 @@ ecg_segmentation_inference(tf_model_context_t *ctx, float32_t *data, uint16_t *s
     uint16_t qos = 0;
     float32_t avgQos = 0;
 
-    // Copy data to input
+    // Copy input and quantize
     for (size_t i = 0; i < ECG_SEG_WINDOW_LEN; i++) {
         if (ctx->input->quantization.type == kTfLiteAffineQuantization) {
             ctx->input->data.int8[i] = data[i] / ctx->input->params.scale + ctx->input->params.zero_point;
@@ -90,7 +113,7 @@ ecg_segmentation_inference(tf_model_context_t *ctx, float32_t *data, uint16_t *s
     TfLiteStatus invokeStatus = ctx->interpreter->Invoke();
     if (invokeStatus != kTfLiteOk) { return invokeStatus; }
 
-    // Extract output and segmentation mask
+    // Extract output and segmentation mask ([BATCH x TIME x CLASSES])
     for (int i = padLen; i < ctx->output->dims->data[1] - (int)padLen; i++) {
         for (int j = 0; j < ctx->output->dims->data[2]; j++) { // CLASSES
             yIdx = i * ctx->output->dims->data[2] + j;
@@ -115,44 +138,56 @@ ecg_segmentation_inference(tf_model_context_t *ctx, float32_t *data, uint16_t *s
     avgQos /= (ctx->output->dims->data[1] - 2 * padLen);
     ns_lp_printf("ECG Segmentation QoS: %f\n", avgQos);
 
-    if (avgQos < ECG_QOS_BAD_AVG_THRESH) {
-        for (int i = padLen; i < ctx->output->dims->data[1] - (int)padLen; i++) {
-            segMask[i] = 0;
-            data[i] = 0;
-        }
-    }
+    // if (avgQos < ECG_QOS_BAD_AVG_THRESH) {
+    //     for (int i = padLen; i < ctx->output->dims->data[1] - (int)padLen; i++) {
+    //         segMask[i] = 0;
+    //         data[i] = 0;
+    //     }
+    // }
 
-    // TODO: Fix gaps in segmentation. Merge same segment types that are separated by less than N samples
+    ecg_segmentation_extract_fiducials(segMask, data);
 
+    return 0;
+}
+
+void
+ecg_segmentation_extract_fiducials(uint16_t *segMask, float32_t *data)
+{
     // Extract fiducial points
     uint16_t prevSegVal = segMask[0] & SIG_MASK_SEG_MASK;
     uint16_t segVal = 0;
     int startIdx = 0;
     float32_t maxVal = abs(data[0]);
     int maxIdx = 0;
-    for (size_t i = 1; i < ECG_SEG_WINDOW_LEN; i++) {
+    for (size_t i = 1; i < ECG_SEG_WINDOW_LEN; i++)
+    {
         // If start of segment, reset max
         segVal = segMask[i] & SIG_MASK_SEG_MASK;
-        if ((segVal != 0) && (prevSegVal == 0)) {
+        if ((segVal != 0) && (prevSegVal == 0))
+        {
             startIdx = i;
             maxVal = abs(data[i]);
             maxIdx = i;
         }
         // If end of segment, mark fiducial
-        else if ((segVal == 0) && (prevSegVal != 0)) {
-            if (startIdx >= 0 && (i - startIdx > 2)) {
+        else if ((segVal == 0) && (prevSegVal != 0))
+        {
+            if (startIdx >= 0 && (i - startIdx > 2))
+            {
                 // Fiducial peak value (e.g p-peak) will be same as segmentation value (e.g. p-wave)
                 segMask[maxIdx] |= (prevSegVal << ECG_MASK_FID_PEAK_OFFSET);
                 // ns_lp_printf("Segment (%d, %d, %d): Fiducial (%d, %f)\n", segMask[maxIdx], startIdx, i, maxIdx, maxVal);
             }
             startIdx = -1;
-        } else if (startIdx >= 0) {
-            if (abs(data[i]) > maxVal) {
+        }
+        else if (startIdx >= 0)
+        {
+            if (abs(data[i]) > maxVal)
+            {
                 maxVal = abs(data[i]);
                 maxIdx = i;
             }
         }
         prevSegVal = segVal;
     }
-    return 0;
 }
