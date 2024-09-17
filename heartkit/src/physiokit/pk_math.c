@@ -70,3 +70,19 @@ pk_next_power_of_2(uint32_t val) {
     while (n < val) { n <<= 1; }
     return n;
 }
+
+
+uint32_t
+cosine_similarity_f32(
+    float32_t *ref,
+    float32_t *sig,
+    size_t len,
+    float32_t *result
+) {
+    float32_t dot = 0.0f, normA = 0.0f, normB = 0.0f;
+    arm_dot_prod_f32(ref, sig, len, &dot);
+    arm_dot_prod_f32(ref, ref, len, &normA);
+    arm_dot_prod_f32(sig, sig, len, &normB);
+    *result = dot / (sqrtf(normA) * sqrtf(normB));
+    return 0;
+}

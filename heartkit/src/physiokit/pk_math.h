@@ -33,6 +33,18 @@ pk_rms_f32(float32_t *pSrc, float32_t *pResult, uint32_t blockSize);
 uint32_t
 pk_next_power_of_2(uint32_t val);
 
+/**
+ * @brief Compute cosine similarity
+ *
+ * @param ref Reference signal
+ * @param sig Signal to compare
+ * @param len Length of signals
+ * @param result Result of comparison
+ * @return uint32_t
+ */
+uint32_t
+cosine_similarity_f32(float32_t *ref, float32_t *sig, size_t len, float32_t *result);
+
 #ifdef __cplusplus
 }
 #endif

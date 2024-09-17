@@ -28,6 +28,7 @@
 #include "sensor.h"
 #include "metrics.h"
 #include "ringbuffer.h"
+#include "tileio.h"
 
 
 enum HeartRhythm { HeartRhythmNormal, HeartRhythmAfib, HeartRhythmAfut };
@@ -42,22 +43,24 @@ typedef enum HeartRate HeartRate;
 enum HeartSegment { HeartSegmentNormal, HeartSegmentPWave, HeartSegmentQrs, HeartSegmentTWave };
 typedef enum HeartSegment HeartSegment;
 
-
-enum AppFsm { AppFsmIdle, AppFsmSleep, AppFsmSensor, AppFsmDenoise, AppFsmSegmentation, AppFsmMetrics };
-typedef enum AppFsm AppFsm;
-
 enum DenoiseMode { DenoiseModeOff, DenoiseModeDsp, DenoiseModeAi };
 typedef enum DenoiseMode DenoiseMode;
 
 enum SegmentationMode { SegmentationModeOff, SegmentationModeDsp, SegmentationModeAi };
 typedef enum SegmentationMode SegmentationMode;
 
+enum ArrhythmiaMode { ArrhythmiaModeOff, ArrhythmiaModeDsp, ArrhythmiaModeAi };
+typedef enum ArrhythmiaMode ArrhythmiaMode;
+
 typedef struct {
-    uint8_t inputSource; // PT0, PT1, PT2, ..., Live
-    uint8_t noiseLevel; // 0 - 99
+    uint8_t inputSource; // cycle, PT1, PT2, ..., Live
+    uint8_t bwNoiseLevel; // 0 - 99
+    uint8_t maNoiseLevel; // 0 - 99
+    uint8_t emNoiseLevel; // 0 - 99
     uint8_t speedMode;  // 0: LPM, 1: HPM
     uint8_t denoiseMode; // 0: off, 1: dsp, 2: ai
     uint8_t segMode;  // 0: off, 1: dsp, 2: ai
+    uint8_t arrMode;  // 0: off, 1: dsp, 2: ai
     uint8_t ledState; // use 3 bits to represent 3 LEDs
 } app_state_t;
 
@@ -151,11 +154,11 @@ extern rb_config_t rbEcgRawTx;
 extern rb_config_t rbEcgDenTx;
 extern rb_config_t rbEcgMaskTx;
 
-
 ///////////////////////////////////////////////////////////////////////////////
 // APP Configuration
 ///////////////////////////////////////////////////////////////////////////////
 
+extern uint8_t LED_COLORS[10][4];
 extern ns_timer_config_t timerCfg;
 extern app_state_t appState;
 

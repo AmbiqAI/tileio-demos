@@ -6,7 +6,7 @@
             "label": "Build Demo",
             "command": "make",
             "options": {
-                "cwd": "${workspaceFolder}/hk-segment",
+                "cwd": "${workspaceFolder}/heartkit",
             },
             "group": {
                 "kind": "build",
@@ -22,7 +22,7 @@
             "label": "Clean Demo",
             "command": "make clean",
             "options": {
-                "cwd": "${workspaceFolder}/hk-segment"
+                "cwd": "${workspaceFolder}/heartkit"
             },
             "group": {
                 "kind": "build",

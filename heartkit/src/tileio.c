@@ -1,5 +1,4 @@
 #include "arm_math.h"
-#include "utils.h"
 #include "ns_ambiqsuite_harness.h"
 #include "FreeRTOS.h"
 #include "task.h"
@@ -365,7 +364,7 @@ static wsfBufPoolDesc_t webbleBufferDescriptors[WEBBLE_WSF_BUFFER_POOLS] = {
     {16, 8}, // 16 bytes, 8 buffers
     {32, 4},
     {64, 6},
-    {512, 14}};
+    {512, 14}}; // 512
 
 static ns_ble_pool_config_t bleWsfBuffers = {
     .pool = webbleWSFBufferPool,
@@ -647,7 +646,7 @@ void tio_send_uio_state(const uint8_t *data, uint32_t length)
 #endif
 }
 
-void tio_start()
+void tio_start(tio_context_t *ctx)
 {
 #if(TIO_BLE_ENABLED)
     ns_ble_pre_init();
@@ -656,9 +655,6 @@ void tio_start()
 
 uint32_t tio_init(tio_context_t *ctx)
 {
-    // Pass it name, manufacturer, and serial number
-    // Provide callbacks (e.g. UIO is written to, signal data is read from, etc.)
-    // Initialize BLE and USB
     uint32_t status = NS_STATUS_SUCCESS;
 #if(TIO_USB_ENABLED)
     status |= tio_usb_init(ctx);

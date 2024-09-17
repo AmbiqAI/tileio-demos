@@ -17,7 +17,6 @@ extern "C" {
 #endif
 
 #include "arm_math.h"
-#include "FreeRTOS.h"
 #include "constants.h"
 
 
@@ -30,7 +29,7 @@ typedef struct {
 } tio_context_t;
 
 uint32_t tio_init(tio_context_t *ctx);
-void tio_start(void);
+void tio_start(tio_context_t *ctx);
 void tio_send_slot_data(uint8_t slot, uint8_t slot_type, const uint8_t *data, uint32_t length);
 void tio_send_uio_state(const uint8_t *data, uint32_t length);
 

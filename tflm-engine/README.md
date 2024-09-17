@@ -28,7 +28,7 @@ sequenceDiagram
     EVB->>PC: Send output data
 ```
 
-### Supported Platforms
+## Supported Platforms
 
 The following Ambiq EVBs are currently supported by neuralSPOT. Be sure to set the PLATFORM variable to the desired value.
 

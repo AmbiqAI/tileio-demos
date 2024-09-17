@@ -21,22 +21,6 @@
 #include "metrics.h"
 #include "store.h"
 
-uint32_t cosine_similarity_f32(
-    float32_t *ref,
-    float32_t *sig,
-    size_t len,
-    float32_t *result
-) {
-    float32_t dot = 0.0f, normA = 0.0f, normB = 0.0f;
-    for (size_t i = 0; i < len; i++) {
-        dot += ref[i] * sig[i];
-        normA += ref[i] * ref[i];
-        normB += sig[i] * sig[i];
-    }
-    *result = dot / (sqrtf(normA) * sqrtf(normB));
-    return 0;
-}
-
 uint32_t
 metrics_init(metrics_config_t *ctx) {
     uint32_t err = 0;

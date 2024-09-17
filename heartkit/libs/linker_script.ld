@@ -94,4 +94,5 @@ SECTIONS
         _sedata = .;
     } > SHARED_SRAM AT>MCU_MRAM
     _init_data_sram = LOADADDR(.shared);
+
 }

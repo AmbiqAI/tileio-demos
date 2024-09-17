@@ -1,7 +1,7 @@
 /**
- * @file ecg_denoise.h
+ * @file ecg_arrhythmia.h
  * @author Adam Page (adam.page@ambiq.com)
- * @brief TFLM ECG denoise
+ * @brief TFLM ECG Arrhythmia model
  * @version 1.0
  * @date 2023-12-13
  *

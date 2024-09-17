@@ -11,13 +11,14 @@
         "usb_descriptors.h": "c",
         "ringbuffer.h": "c",
         "freertos.h": "c",
-        "max86150_addons.h": "c"
+        "max86150_addons.h": "c",
+        "arm_math.h": "c"
     },
     "makefile.makeDirectory": "./",
     "makefile.launchConfigurations": [
         {
-            "cwd": "${workspaceFolder}/hk-segment/build",
-            "binaryPath": "${workspaceFolder}/hk-segment/build/main.axf",
+            "cwd": "${workspaceFolder}/heartkit/build",
+            "binaryPath": "${workspaceFolder}/heartkit/build/main.axf",
             "binaryArgs": []
         }
     ],

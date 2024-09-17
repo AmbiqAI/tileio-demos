@@ -1,36 +1,38 @@
 /**
  * @file constants.h
  * @author Adam Page (adam.page@ambiq.com)
- * @brief Store global app constants
+ * @brief Global app constants
  * @version 1.0
- * @date 2023-12-13
+ * @date 2024-09-16
  *
- * @copyright Copyright (c) 2023
+ * @copyright Copyright (c) 2024
  *
  */
 #ifndef __APP_CONSTANTS_H
 #define __APP_CONSTANTS_H
 
-///////////////////////////////////////////////////////////////////////////////
-// EVB Configuration
-///////////////////////////////////////////////////////////////////////////////
 
-#define I2C_IOM (1)
-#define I2C_SPEED_HZ (400000)
-#define MAX86150_ADDR (0x5E)
-#define LEDSTICK_ADDR (0x23)
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 
 ///////////////////////////////////////////////////////////////////////////////
 // Sensor Configuration
 ///////////////////////////////////////////////////////////////////////////////
 
-#define NUM_INPUT_PTS (5)
-#define PTS_ECG_DATA_LEN (2000)
+#define I2C_IOM (1)
+#define I2C_SPEED_HZ (100000)
+#define MAX86150_ADDR (0x5E)
+#define LEDSTICK_ADDR (0x23)
+
+#define NUM_INPUT_PTS (6)
+#define PTS_ECG_DATA_LEN (4000)
+
 #define SENSOR_RATE (200)
 #define SENSOR_ECG_SLOT (0)
 #define SENSOR_BUF_LEN (4 * 64) // Double FIFO depth
-#define SENSOR_NOM_REFRESH_LEN (20)
+#define SENSOR_NOM_REFRESH_LEN (16)
 #define MAX86150_PART_ID_VAL (0x1E)
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -47,7 +49,7 @@
 // ECG Denoise Configuration
 ///////////////////////////////////////////////////////////////////////////////
 
-#define ECG_DEN_MODEL_SIZE_KB (80)
+#define ECG_DEN_MODEL_SIZE_KB (63)
 #define ECG_DEN_THRESHOLD (0.5) // 0.75
 #define ECG_DEN_WINDOW_LEN (250)
 #define ECG_DEN_PAD_LEN (25)
@@ -58,7 +60,7 @@
 // ECG Segmentation Configuration
 ///////////////////////////////////////////////////////////////////////////////
 
-#define ECG_SEG_MODEL_SIZE_KB (60)
+#define ECG_SEG_MODEL_SIZE_KB (27)
 #define ECG_SEG_THRESHOLD (0.5) // 0.75
 #define ECG_SEG_NUM_CLASS (4) // 2
 #define ECG_SEG_WINDOW_LEN (250)
@@ -76,13 +78,14 @@
 // ECG Arrhythmia Configuration
 ///////////////////////////////////////////////////////////////////////////////
 
-#define ECG_ARR_MODEL_SIZE_KB (80)
-#define ECG_ARR_THRESHOLD (0.5)
+#define ECG_ARR_MODEL_SIZE_KB (22)
+#define ECG_ARR_THRESHOLD (0.4)
 #define ECG_ARR_WINDOW_LEN (500)
 #define ECG_ARR_PAD_LEN (0)
 #define ECG_ARR_VALID_LEN (ECG_ARR_WINDOW_LEN - 2 * ECG_ARR_PAD_LEN)
 #define ECG_ARR_BUF_LEN (2 * ECG_ARR_WINDOW_LEN)
 
+// ECG Arrhythmia Classes
 #define ECG_ARR_INCONCLUSIVE (0)
 #define ECG_ARR_SR (1)
 #define ECG_ARR_SB (2)
@@ -90,9 +93,19 @@
 #define ECG_ARR_GSVT (4)
 
 ///////////////////////////////////////////////////////////////////////////////
-// TIO Mask Format
+// TIO ECG Mask Format
 ///////////////////////////////////////////////////////////////////////////////
 
+#define TIO_UIO_INPUT_SEL_IDX (0)
+#define TIO_UIO_BW_NOISE_IDX (1)
+#define TIO_UIO_MA_NOISE_IDX (2)
+#define TIO_UIO_EM_NOISE_IDX (3)
+#define TIO_UIO_SPEED_MODE_IDX (4)
+#define TIO_UIO_DEN_MODE_IDX (5)
+#define TIO_UIO_SEG_MODE_IDX (6)
+#define TIO_UIO_ARR_MODE_IDX (7)
+
+// TIO Mask Format
 // [5-0] : 6-bit segmentation
 // [7-6] : 2-bit QoS (0:bad, 1:poor, 2:fair, 3:good)
 // [15-8] : 8-bit Fiducial
@@ -109,10 +122,6 @@
 #define SIG_QOS_POOR (1)
 #define SIG_QOS_FAIR (2)
 #define SIG_QOS_GOOD (3)
-
-///////////////////////////////////////////////////////////////////////////////
-// TIO BLE SLOT0 (ECG) Mask Format
-///////////////////////////////////////////////////////////////////////////////
 
 // ECG Mask
 // [5-0] : 6-bit segmentation (0:none, 1:p-wave, 2:qrs, 3:t-wave)
@@ -177,21 +186,6 @@
 #define TIO_SLOT0_FS (ECG_SAMPLE_RATE / TIO_SLOT0_SIG_NUM_VALS)
 #define TIO_SLOT0_SCALE (1000)
 
-#define TIO_SLOT1_NUM_CH (1)
-#define TIO_SLOT1_SIG_NUM_VALS (50)
-#define TIO_SLOT1_FS (ECG_SAMPLE_RATE / TIO_SLOT1_SIG_NUM_VALS)
-#define TIO_SLOT1_SCALE (1000)
-
-#define TIO_SLOT2_NUM_CH (1)
-#define TIO_SLOT2_SIG_NUM_VALS (50)
-#define TIO_SLOT2_FS (ECG_SAMPLE_RATE / TIO_SLOT2_SIG_NUM_VALS)
-#define TIO_SLOT2_SCALE (1000)
-
-#define TIO_SLOT3_NUM_CH (1)
-#define TIO_SLOT3_SIG_NUM_VALS (50)
-#define TIO_SLOT3_FS (ECG_SAMPLE_RATE / TIO_SLOT3_SIG_NUM_VALS)
-#define TIO_SLOT3_SCALE (1000)
-
 
 ///////////////////////////////////////////////////////////////////////////////
 // APP Configuration
@@ -204,5 +198,9 @@
 #define MAX3(a, b, c) (MAX(MAX(a, b), c))
 #define MAX4(a, b, c, d) (MAX(MAX(a, b), MAX(c, d)))
 #define CLIP(a, min, max) (MAX(MIN(a, max), min))
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif // __APP_CONSTANTS_H

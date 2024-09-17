@@ -55,6 +55,7 @@ ecg_arrhythmia_init(tf_model_context_t *ctx) {
 
     // Check arena size
     bytesUsed = ctx->interpreter->arena_used_bytes();
+    ns_lp_printf("[ARR] Arena used: %d bytes\n", bytesUsed);
     if (bytesUsed > ctx->arenaSize) {
         TF_LITE_REPORT_ERROR(ctx->reporter, "Arena mismatch: given=%d < expected=%d bytes.", ctx->arenaSize, bytesUsed);
         return 1;
@@ -70,6 +71,7 @@ uint32_t
 ecg_arrhythmia_inference(tf_model_context_t *ctx, float32_t *ecgIn, float32_t threshold) {
     float32_t yVal, yMax = 0;
     uint32_t yMaxIdx = 0;
+
     // Copy input and quantize
     for (size_t i = 0; i < ECG_ARR_WINDOW_LEN; i++) {
         if (ctx->input->quantization.type == kTfLiteAffineQuantization) {

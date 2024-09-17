@@ -1,15 +1,15 @@
 /**
  * @file metrics.h
  * @author Adam Page (adam.page@ambiq.com)
- * @brief Compute physiokit metrics
+ * @brief Compute heartkit metrics
  * @version 1.0
  * @date 2023-12-13
  *
  * @copyright Copyright (c) 2023
  *
  */
-#ifndef __PK_METRICS_H
-#define __PK_METRICS_H
+#ifndef __HK_METRICS_H
+#define __HK_METRICS_H
 
 #include "arm_math.h"
 
@@ -27,12 +27,12 @@ typedef struct {
 typedef struct {
     float32_t hr;
     float32_t hrv;
-    float32_t denoise_cossim;
-    float32_t arrhythmia_label;
-    float32_t denoise_ips;
-    float32_t segment_ips;
-    float32_t arrhythmia_ips;
-    float32_t cpu_perc_util;
+    float32_t denoiseCossim;
+    float32_t arrhythmiaLabel;
+    float32_t denoiseIps;
+    float32_t segmentIps;
+    float32_t arrhythmiaIps;
+    float32_t cpuPercUtil;
 } metrics_app_results_t;
 
 
@@ -45,21 +45,6 @@ typedef struct {
     float32_t spo2;  // Blood oxygen saturation (%)
 } metrics_ppg_results_t;
 
-/**
- * @brief Compute cosine similarity
- *
- * @param ref Reference signal
- * @param sig Signal to compare
- * @param len Length of signals
- * @param result Result of comparison
- * @return uint32_t
- */
-uint32_t cosine_similarity_f32(
-    float32_t *ref,
-    float32_t *sig,
-    size_t len,
-    float32_t *result
-);
 
 /**
  * @brief Initialize metrics
@@ -70,19 +55,6 @@ uint32_t cosine_similarity_f32(
 uint32_t
 metrics_init(metrics_config_t *ctx);
 
-
-uint32_t
-metrics_capture_ppg(
-    metrics_config_t *ctx,
-    float32_t *ppg1,
-    float32_t *ppg2,
-    uint16_t *ppgMask,
-    size_t len,
-    float32_t ppg1Mean,
-    float32_t ppg2Mean,
-    metrics_ppg_results_t *results
-);
-
 uint32_t
 metrics_capture_ecg(
     metrics_config_t *ctx,
@@ -92,4 +64,4 @@ metrics_capture_ecg(
     metrics_app_results_t *results
 );
 
-#endif // __PK_METRICS_H
+#endif // __HK_METRICS_H

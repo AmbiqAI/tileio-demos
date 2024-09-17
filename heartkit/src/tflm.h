@@ -1,7 +1,7 @@
 /**
- * @file ecg_segmentation.h
+ * @file tflm.h
  * @author Adam Page (adam.page@ambiq.com)
- * @brief TFLM ECG segmentation
+ * @brief TFLM helper functions
  * @version 1.0
  * @date 2023-12-13
  *

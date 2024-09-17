@@ -297,12 +297,12 @@ hrv_td_metrics_t ecgHrvMetrics;
 metrics_app_results_t appMetResults = {
     .hr = 0,
     .hrv = 0,
-    .denoise_cossim = 0,
-    .arrhythmia_label = 0,
-    .denoise_ips = 0,
-    .segment_ips = 0,
-    .arrhythmia_ips = 0,
-    .cpu_perc_util = 0,
+    .denoiseCossim = 0,
+    .arrhythmiaLabel = 0,
+    .denoiseIps = 0,
+    .segmentIps = 0,
+    .arrhythmiaIps = 0,
+    .cpuPercUtil = 0,
 };
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -341,24 +341,27 @@ rb_config_t rbEcgMaskTx = {
 // LED Configuration
 ///////////////////////////////////////////////////////////////////////////////
 
-// static uint8_t LED_COLORS[10][4] = {
-//     {0,  32, 191, 246},
-//     {1,  32, 191 ,246},
-//     {2,  32, 191 ,246},
-//     {3,  42, 163, 238},
-//     {4,  71, 120, 228},
-//     {5, 106,  80, 218},
-//     {6, 144,  39, 208},
-//     {7, 185,   0, 198},
-//     {8, 207,   0, 193},
-//     {9, 207,   0, 193},
-// };
+uint8_t LED_COLORS[10][4] = {
+    {0,  32, 191, 246},
+    {1,  32, 191 ,246},
+    {2,  32, 191 ,246},
+    {3,  42, 163, 238},
+    {4,  71, 120, 228},
+    {5, 106,  80, 218},
+    {6, 144,  39, 208},
+    {7, 185,   0, 198},
+    {8, 207,   0, 193},
+    {9, 207,   0, 193},
+};
 
 app_state_t appState = {
     .inputSource = 0,
-    .noiseLevel = 0,
-    .speedMode = 0,
+    .bwNoiseLevel = 0,
+    .maNoiseLevel = 0,
+    .emNoiseLevel = 0,
+    .speedMode = 1,
     .denoiseMode = DenoiseModeAi,
     .segMode = SegmentationModeAi,
+    .arrMode = ArrhythmiaModeAi,
     .ledState = 0,
 };

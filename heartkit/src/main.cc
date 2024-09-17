@@ -27,6 +27,7 @@
 #include "nstdb_noise.h"
 #include "physiokit/pk_filter.h"
 #include "physiokit/pk_ecg.h"
+#include "physiokit/pk_math.h"
 #include "tflm.h"
 #include "ecg_segmentation.h"
 #include "ecg_denoise.h"
@@ -47,7 +48,6 @@ static TaskHandle_t sensorTaskHandle;
 static TaskHandle_t processTaskHandle;
 static TaskHandle_t tioTaskHandle;
 static TaskHandle_t appSetupTask;
-
 
 tio_context_t tioCtx = {
     .uio_update_cb = NULL,
@@ -85,11 +85,11 @@ set_input_source(uint8_t source) {
 }
 
 void
-set_noise_input(uint8_t level) {
-    if (appState.noiseLevel != level) {
-        appState.noiseLevel = level;
-        ns_lp_printf("Noise Level: %d\n", appState.noiseLevel);
-    }
+set_noise_inputs(uint8_t bw, uint8_t ma, uint8_t em) {
+    appState.bwNoiseLevel = bw;
+    appState.maNoiseLevel = ma;
+    appState.emNoiseLevel = em;
+    ns_lp_printf("Noise Level: %d,%d,%d\n", appState.bwNoiseLevel, appState.maNoiseLevel, appState.emNoiseLevel);
 }
 
 void
@@ -110,6 +110,15 @@ set_segmentation_mode(uint8_t mode) {
     }
 }
 
+void
+set_arrhythmia_mode(uint8_t mode) {
+    mode = MIN(mode, 2);
+    if (appState.arrMode != mode) {
+        appState.arrMode = mode;
+        ns_lp_printf("Arrhythmia Mode: %d\n", appState.arrMode);
+    }
+}
+
 
 void
 set_speed_mode(uint8_t mode) {
@@ -117,21 +126,7 @@ set_speed_mode(uint8_t mode) {
     if (appState.speedMode != mode) {
         appState.speedMode = mode;
         ns_set_performance_mode(mode ? NS_MAXIMUM_PERF : NS_MINIMUM_PERF);
-        ns_lp_printf("Speed Mode: %d\n", appState.speedMode);
-    }
-}
-
-void
-set_leds_state(uint8_t state) {
-    uint8_t ledVal = state & 0x07;
-    if (appState.ledState != ledVal) {
-        appState.ledState = ledVal;
-        am_devices_led_array_out(
-            am_bsp_psLEDs,
-            AM_BSP_NUM_LEDS,
-            appState.ledState
-        );
-        ns_lp_printf("LED State: %d\n", appState.ledState);
+        ns_lp_printf("CPU Speed Mode: %d\n", appState.speedMode);
     }
 }
 
@@ -187,12 +182,12 @@ void send_slot0_metrics() {
     float32_t buffer[60];
     buffer[0] = appMetResults.hr;
     buffer[1] = appMetResults.hrv;
-    buffer[2] = appMetResults.denoise_cossim;
-    buffer[3] = appMetResults.arrhythmia_label;
-    buffer[4] = appMetResults.denoise_ips;
-    buffer[5] = appMetResults.segment_ips;
-    buffer[6] = appMetResults.arrhythmia_ips;
-    buffer[7] = appMetResults.cpu_perc_util;
+    buffer[2] = appMetResults.denoiseCossim;
+    buffer[3] = appMetResults.arrhythmiaLabel;
+    buffer[4] = appMetResults.denoiseIps;
+    buffer[5] = appMetResults.segmentIps;
+    buffer[6] = appMetResults.arrhythmiaIps;
+    buffer[7] = appMetResults.cpuPercUtil;
     tio_send_slot_data(0, 1, (uint8_t *)buffer, 8*sizeof(float32_t));
 }
 
@@ -202,27 +197,28 @@ void received_slot_data(uint8_t slot, uint8_t slot_type, const uint8_t *data, ui
 
 void send_uio_state() {
     uint8_t uioBuffer[8];
-    uioBuffer[0] = appState.inputSource;
-    uioBuffer[1] = appState.noiseLevel;
-    uioBuffer[2] = appState.denoiseMode;
-    uioBuffer[3] = appState.segMode;
-    uioBuffer[4] = appState.speedMode;
-    uioBuffer[5] = 0;
-    uioBuffer[6] = 0;
-    uioBuffer[7] = appState.ledState;
+    uioBuffer[TIO_UIO_INPUT_SEL_IDX] = appState.inputSource;
+    uioBuffer[TIO_UIO_BW_NOISE_IDX] = appState.bwNoiseLevel;
+    uioBuffer[TIO_UIO_MA_NOISE_IDX] = appState.maNoiseLevel;
+    uioBuffer[TIO_UIO_EM_NOISE_IDX] = appState.emNoiseLevel;
+    uioBuffer[TIO_UIO_SPEED_MODE_IDX] = appState.speedMode;
+    uioBuffer[TIO_UIO_DEN_MODE_IDX] = appState.denoiseMode;
+    uioBuffer[TIO_UIO_SEG_MODE_IDX] = appState.segMode;
+    uioBuffer[TIO_UIO_ARR_MODE_IDX] = appState.arrMode;
     tio_send_uio_state(uioBuffer, 8);
 }
 
 void received_uio_state(const uint8_t *data, uint32_t length) {
-    for (size_t i = 0; i < length; i++) {
-        ns_lp_printf("UIO[%d]: %d\n", i, data[i]);
-    }
-    set_input_source(data[0]);
-    set_noise_input(data[1]);
-    set_denoise_mode(data[2]);
-    set_segmentation_mode(data[3]);
-    set_speed_mode(data[4]);
-    set_leds_state(data[7]);
+    set_input_source(data[TIO_UIO_INPUT_SEL_IDX]);
+    set_noise_inputs(
+        data[TIO_UIO_BW_NOISE_IDX],
+        data[TIO_UIO_MA_NOISE_IDX],
+        data[TIO_UIO_EM_NOISE_IDX]
+    );
+    set_speed_mode(data[TIO_UIO_SPEED_MODE_IDX]);
+    set_denoise_mode(data[TIO_UIO_DEN_MODE_IDX]);
+    set_segmentation_mode(data[TIO_UIO_SEG_MODE_IDX]);
+    set_arrhythmia_mode(data[TIO_UIO_ARR_MODE_IDX]);
     send_uio_state();
 }
 
@@ -273,11 +269,6 @@ capture_sensor() {
  */
 void preprocess() {
     size_t numSamples;
-    if (sensorCtx.inputSource != appState.inputSource) {
-        sensorCtx.inputSource = appState.inputSource;
-        ns_lp_printf("Input Source: %d\n", sensorCtx.inputSource);
-        flush_pipeline();
-    }
     // Downsample sensor data to slots
     numSamples = ringbuffer_len(&rbEcgSensor);
     for (size_t i = 0; i < numSamples/ECG_DS_RATE; i++) {
@@ -330,10 +321,10 @@ void ProcessTask(void *pvParameters) {
             arm_copy_f32(ecgDenInout, ecgDenNoise, ECG_DEN_WINDOW_LEN);
 
             // Add noise to signal based on input
-            if (sensorCtx.inputSource < NUM_INPUT_PTS && appState.noiseLevel > 0) {
-                nstdb_add_em_noise(ecgDenInout, ecgDenInout, ECG_DEN_WINDOW_LEN, (float32_t)appState.noiseLevel*1.0e-5);
-                nstdb_add_ma_noise(ecgDenInout, ecgDenInout, ECG_DEN_WINDOW_LEN, (float32_t)appState.noiseLevel*1.0e-5);
-                nstdb_add_bw_noise(ecgDenInout, ecgDenInout, ECG_DEN_WINDOW_LEN, (float32_t)appState.noiseLevel*2.0e-5);
+            if (sensorCtx.inputSource < NUM_INPUT_PTS) {
+                nstdb_add_bw_noise(ecgDenInout, ecgDenInout, ECG_DEN_WINDOW_LEN, (float32_t)appState.bwNoiseLevel*2.0e-5);
+                nstdb_add_ma_noise(ecgDenInout, ecgDenInout, ECG_DEN_WINDOW_LEN, (float32_t)appState.maNoiseLevel*1.0e-5);
+                nstdb_add_em_noise(ecgDenInout, ecgDenInout, ECG_DEN_WINDOW_LEN, (float32_t)appState.emNoiseLevel*1.0e-5);
             }
 
             // Copy noisy signal to seg buffer
@@ -346,20 +337,23 @@ void ProcessTask(void *pvParameters) {
             // Denoise using AI model
             else if (appState.denoiseMode == DenoiseModeAi) {
                 err = ecg_denoise_inference(&ecgDenModelCtx, ecgDenInout, ecgDenInout, 0, ECG_DEN_THRESHOLD);
+            } else {
+                err = 0;
             }
 
             // Compute cosine similarity
-            if (appState.noiseLevel > 0) {
+            if (sensorCtx.inputSource < NUM_INPUT_PTS) {
                 cosine_similarity_f32(
                     &ecgDenInout[ECG_DEN_PAD_LEN],
                     &ecgDenNoise[ECG_DEN_PAD_LEN],
                     ECG_DEN_VALID_LEN,
-                    &appMetResults.denoise_cossim
+                    &appMetResults.denoiseCossim
                 );
+            // Skip for live sensor mode
             } else {
-                appMetResults.denoise_cossim = 1.0;
+                appMetResults.denoiseCossim = 1.0;
             }
-            appMetResults.denoise_cossim *= 100.0;
+            appMetResults.denoiseCossim *= 100.0;
 
             // Copy clean signal to seg buffer
             ringbuffer_push(&rbEcgSeg, &ecgDenInout[ECG_DEN_PAD_LEN], ECG_DEN_VALID_LEN);
@@ -367,7 +361,7 @@ void ProcessTask(void *pvParameters) {
             // Seek ringbuffers
             ringbuffer_seek(&rbEcgDen, ECG_DEN_VALID_LEN);
             deltaUs = ns_us_ticker_read(&timerCfg) - tickUs;
-            appMetResults.denoise_ips = 1000000.0/deltaUs;
+            appMetResults.denoiseIps = 1000000.0/deltaUs;
             ns_lp_printf("<DENOISE Time: %d (err=%d) >\n", deltaUs/1000, err);
         }
 
@@ -402,22 +396,19 @@ void ProcessTask(void *pvParameters) {
 
             ringbuffer_seek(&rbEcgSeg, ECG_SEG_VALID_LEN);
             deltaUs = ns_us_ticker_read(&timerCfg) - tickUs;
-            appMetResults.segment_ips = 1000000.0/deltaUs;
+            appMetResults.segmentIps = 1000000.0/deltaUs;
             ns_lp_printf("<SEGMENT Time: %d (err=%d) >\n", deltaUs/1000, err);
         }
 
         ///////////////////////////////////////////////
-        // METRICS BLOCK
+        // ARRHYTHMIA/METRICS BLOCK
         ///////////////////////////////////////////////
         else if (MIN(ringbuffer_len(&rbEcgMet), ringbuffer_len(&rbEcgMaskMet)) >= ECG_MET_WINDOW_LEN) {
             tickUs = ns_us_ticker_read(&timerCfg);
+
             // Grab data from ringbuffers
             ringbuffer_peek(&rbEcgMet, ecgMetData, ECG_MET_WINDOW_LEN);
             ringbuffer_peek(&rbEcgMaskMet, ecgMaskMetData, ECG_MET_WINDOW_LEN);
-
-            if (true) {
-                appMetResults.arrhythmia_label = ecg_arrhythmia_inference(&ecgArrModelCtx, ecgMetData, ECG_ARR_THRESHOLD);
-            }
 
             // Compute metrics
             err = metrics_capture_ecg(
@@ -426,15 +417,24 @@ void ProcessTask(void *pvParameters) {
                 &appMetResults
             );
 
-            appMetResults.cpu_perc_util = 100.0*cpuBusyMs/(cpuBusyMs + cpuIdleMs);
+            if (appState.arrMode == ArrhythmiaModeDsp) {
+                appMetResults.arrhythmiaLabel = appMetResults.hr < 40 ? ECG_ARR_SB : appMetResults.hr > 100 ? ECG_ARR_GSVT : ECG_ARR_SR;
+                ns_lp_printf("HR: %f\n", appMetResults.hr);
+            } else if (appState.arrMode == ArrhythmiaModeAi) {
+                appMetResults.arrhythmiaLabel = ecg_arrhythmia_inference(&ecgArrModelCtx, ecgMetData, ECG_ARR_THRESHOLD);
+            } else {
+                appMetResults.arrhythmiaLabel = 0;
+            }
+            deltaUs = ns_us_ticker_read(&timerCfg) - tickUs;
+            appMetResults.arrhythmiaIps = 1000000.0/deltaUs;
+
+            appMetResults.cpuPercUtil = 100.0*cpuBusyMs/(cpuBusyMs + cpuIdleMs);
             cpuBusyMs = 0;
             cpuIdleMs = 0;
 
             // Store metrics
             ringbuffer_seek(&rbEcgMet, ECG_MET_VALID_LEN);
             ringbuffer_seek(&rbEcgMaskMet, ECG_MET_VALID_LEN);
-            deltaUs = ns_us_ticker_read(&timerCfg) - tickUs;
-            appMetResults.arrhythmia_ips = 1000000.0/deltaUs;
 
             // Broadcast metrics
             send_slot0_metrics();
@@ -442,14 +442,8 @@ void ProcessTask(void *pvParameters) {
             ns_lp_printf("<METRICS Time: %d (err=%d) >\n", deltaUs/1000, err);
         }
 
-        ///////////////////////////////////////////////
-        // TIO SLOT BLOCK
-        ///////////////////////////////////////////////
+        // Send slot0 signals
         send_slot0_signals();
-
-        ///////////////////////////////////////////////
-        // DELAY BLOCK
-        ///////////////////////////////////////////////
 
         // Try to maintain 100ms loop to not back up Tileio
         deltaUs = ns_us_ticker_read(&timerCfg);
@@ -463,11 +457,12 @@ void ProcessTask(void *pvParameters) {
 }
 
 void setup_task(void *pvParameters) {
+    tio_start(&tioCtx);
     xTaskCreate(TioTask, "TioTask", 512, NULL, 3, &tioTaskHandle);
     xTaskCreate(SensorTask, "SensorTask", 256, 0, 3, &sensorTaskHandle);
-    xTaskCreate(ProcessTask, "ProcessTask", 3328, 0, 1, &processTaskHandle);
-    vTaskSuspend(NULL);
+    xTaskCreate(ProcessTask, "ProcessTask", 2816, 0, 1, &processTaskHandle);
     send_uio_state();
+    vTaskSuspend(NULL);
     while (1) { };
 }
 
@@ -475,22 +470,19 @@ int main(void) {
 
     sensorCtx.inputSource = appState.inputSource;
     nsPwrCfg.eAIPowerMode = appState.speedMode ? NS_MAXIMUM_PERF : NS_MINIMUM_PERF;
+    tioCtx.slot_update_cb = &received_slot_data;
+    tioCtx.uio_update_cb = &received_uio_state;
 
     NS_TRY(ns_core_init(&nsCoreCfg), "Core Init failed.\b");
     NS_TRY(ns_power_config(&nsPwrCfg), "Power Init Failed\n");
     NS_TRY(ns_i2c_interface_init(&nsI2cCfg, I2C_SPEED_HZ), "I2C Init Failed\n");
-    NS_TRY(ns_timer_init(&timerCfg), "Timer0 Init failed.\n");
-    // NS_TRY(ns_timer_init(&slot1TimerCfg), "Timer1 Init failed.\n");
+    NS_TRY(ns_timer_init(&timerCfg), "Timer Init failed.\n");
     NS_TRY(ns_peripheral_button_init(&nsBtnCfg), "Button Init failed.\n");
     am_devices_led_array_init(am_bsp_psLEDs, AM_BSP_NUM_LEDS);
-    am_devices_led_array_out(am_bsp_psLEDs, AM_BSP_NUM_LEDS, appState.ledState);
+    am_devices_led_array_out(am_bsp_psLEDs, AM_BSP_NUM_LEDS, 0);
     NS_TRY(ledstick_init(&nsI2cCfg, LEDSTICK_ADDR), "Led Stick Init Failed\n");
     NS_TRY(sensor_init(&sensorCtx), "Sensor Init Failed\n");
-
-    tioCtx.slot_update_cb = &received_slot_data;
-    tioCtx.uio_update_cb = &received_uio_state;
     NS_TRY(tio_init(&tioCtx), "TIO Init Failed\n");
-
     NS_TRY(tflm_init(), "TFLM Init Failed\n");
     NS_TRY(ecg_denoise_init(&ecgDenModelCtx), "ECG Segmentation Init Failed\n");
     NS_TRY(ecg_segmentation_init(&ecgSegModelCtx), "ECG Segmentation Init Failed\n");
