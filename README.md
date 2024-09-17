@@ -4,6 +4,6 @@ This repository contains a collection of demos to demonstrate the capabilities o
 
 ## Available Demos
 
-- [**HeartKit:ECG AI Heart Analysis**](./heartkit/README.md): This demo performs real-time ECG and PPG segmentation using HeartKit AI models along with PhysioKit framework. The diagram below shows the data flow from the sensor to the AI model and the results are streamed to the PhysioKit Pro app via BLE.
+- [**HeartKit: ECG AI Heart Analysis**](./heartkit/README.md): This demo performs advanced real-time, heart analysis using a multi-head neural network running on Ambiq’s ultra low-power SoC.
 
 - [**TFLM Inference Egnine**](./tflm-engine/README.md): This demo configures the EVB to run as a TFLM inference engine that serves requests over USB using RPC.
