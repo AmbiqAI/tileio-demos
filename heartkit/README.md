@@ -6,8 +6,8 @@ This application performs real-time, on-device ECG analysis using a multi-headed
 
 * **Input Selection**: Select between subject data or live sensor data.
 * **ECG Denoising**: Clean the ECG signal using either DSP or enhanced AI denoising.
-* **ECG Segmentation**: Delineate the QRS complex, P-wave, and T-wave to identify heart rate metrics using either DSP or AI segmentation.
-* **ECG Arrhythmia Detection**: Perform 4-class arrhythmia detection using an AI model.
+* **ECG Segmentation**: Delineate the QRS complex, P-wave, and T-wave to identify heart rate metrics using either DSP or an enhanced AI segmentation model.
+* **ECG Arrhythmia Detection**: Perform 4-class arrhythmia detection using an enhanced AI model.
 
 In addition to selecting the input stream, the user is also able to adjust a number of other parameters, such as injecting noise, selecting AI modes, and adjusting the hardware such as clock speed.
 
@@ -18,95 +18,66 @@ flowchart LR
     SEG --> ARR[Arrhythmia Block]
 ```
 
-## Quick Setup
+## Starting from Scratch
 
-1. [Compile and flash EVB firmware](#compiling-and-flashing-firmware)
-1. Launch Tileio App either using iOS/iPadOS app or [web app](https://ambiqai.github.io/tileio/)
-1. Create new dashboard in Tileio and upload the [Tileio Configuration](./assets/hk-dashboard-config.json).
-1. Connect the EVB either via USB or BLE to Tileio app.
-1. Select the dashboard and connect to the EVB via BLE or USB.
+Before we can run the demo, the following steps need to be performed:
 
-## Supported Platforms
+1. [Compile and flash EVB firmware](#1-compile-and-flash-evb)
+2. [Setup Tileio Dashboard](#2-setup-tileio-dashboard)
 
-The following Ambiq EVBs are currently supported by neuralSPOT. Be sure to set the PLATFORM variable to the desired value.
+Please refer to the top-level [README](../README.md) for detailed instructions on how to clone and install the necessary tools. Once the tools are installed, follow the instructions below to compile and flash the firmware to the EVB.
 
-* [__apollo4p_evb__](https://www.ambiq.top/en/apollo4-plus-soc-eval-board): Apollo4 Plus SoC, Eval Board
-* [__apollo4p_blue_kxr_evb__](https://www.ambiq.top/en/apollo4-blue-plus-kxr-soc-eval-board): Apollo4 Blue Plus KXR SoC Eval Board
-* [__apollo4l_blue_evb__](https://www.ambiq.top/en/apollo4-blue-lite-soc-eval-board): Apollo4 Blue Lite SoC, Eval board
+### Required Hardware
 
-## Compiling and Flashing Firmware
+* [Ambiq Apollo4 EVB Platform](#supported-platforms)
+* [MAX86150 ECG/PPG Sensor](https://protocentral.com/product/protocentral-max86150-ppg-and-ecg-breakout-with-qwiic-v2/?cgkit_search_word=max86150)
+* iPad or tablet/PC with Chrome/Edge browser
 
-### Download repository and submodules
+### Supported Platforms
 
-```bash
-git clone --recurse-submodules https://github.com/AmbiqAI/tileio-demos.git
-```
+The following Ambiq EVBs are currently supported by the demo. Be sure to set the __PLATFORM__ variable to the desired value.
 
-### Install toolchain and segger
+* **apollo4p_evb** - [Apollo4 Plus SoC, Eval Board](https://www.ambiq.top/en/apollo4-plus-soc-eval-board):
+* **apollo4p_blue_kxr_evb** - [Apollo4 Blue Plus KXR SoC Eval Board](https://www.ambiq.top/en/apollo4-blue-plus-kxr-soc-eval-board):
+* **apollo4l_blue_evb** - [Apollo4 Blue Lite SoC, Eval board](https://www.ambiq.top/en/apollo4-blue-lite-soc-eval-board):
 
-* [Arm GNU Toolchain ^12.2](https://developer.arm.com/downloads/-/arm-gnu-toolchain-downloads)
-* [Segger J-Link ^7.92](https://www.segger.com/downloads/jlink/)
+### 1. Compile and Flash EVB
 
-### Building
-
-Run the following command to build the firmware. Be sure to set the `PLATFORM` variable to the desired value.
+Run the following command to compile the firmware. Be sure to set the `PLATFORM` variable to the desired value from list above.
 
 ```bash
 make PLATFORM=apollo4p_blue_kxr clean
 make PLATFORM=apollo4p_blue_kxr
 ```
 
-### Flashing
-
-To flash the firmware to the EVB, simply conntect the EVB to your computer using a USB-C cable and run the following command. Ensure USB-C cable is plugged into the J-Link USB port on the EVB.
+To flash the firmware to the EVB, simply connect the EVB to your computer using a USB-C cable and run the following command. Ensure USB-C cable is plugged into the J-Link USB port on the EVB.
 
 ```bash
 make PLATFORM=apollo4p_blue_kxr deploy
 ```
 
-### SWO Logging
+### 2. Setup Tileio Dashboard
 
-To view SWO ouput, you can run the following command.
+Launch the Tileio App using either the iOS/iPadOS app or the [web app](https://ambiqai.github.io/tileio/). The first time you launch the app, you will need to create a new dashboard and either select the respective built-in dashboard or upload the latest [Tileio dashboard configuration file](#assets).
 
-```bash
-make PLATFORM=apollo4p_blue_kxr view
-```
+## Running the Demo
 
-## Tileio Configuration
+Once the EVB is flashed and the Tileio app is configured, you can now connect the EVB to the Tileio app. Connect the EVB either via USB or BLE to the Tileio app. Select the dashboard and connect to the EVB via BLE or USB. Please refer to [Tileio Documentation](https://ambiqai.github.io/tileio-docs/) to learn more about the Tileio App. Once connected, real-time data will be displayed on the dashboard.
 
-The application uses TileIO to communicate between the host and the device. The TileIO configuration is as follows:
+## Dashboard Overview
 
-* [**Tileio Configuration**](./assets/hk-dashboard-config.json)
+The dashboard is layed out in 4 rows as shown below.
 
+<img src="./assets/hk-dashboard-overview.png"
+     style="display:block;float:none;margin-left:auto;margin-right:auto;width:70%;min-width:128px;max-width:1280px">
 
-### SLOT0: ECG
+The first row consists of two tiles: (1) the ECG signal and (2) the I/O controls tile. The I/O controls tile allows the user to select the input source, adjust noise levels, and select the AI modes. The input source consists of 5 subject's pre-recorded ECG data containing different arrhythmia conditions. In addition, the user can select live sensor data from the connected MAX86150 sensor. There are three noise levels that can be adjusted: baseline wander (BW), muscle artifacts (MA), and electrode movement (EM). These are controlled via the three sliders from 0% to 100%. The I/O tile also allows the user to select the AI modes for denoising, segmentation, and arrhythmia detection. The choices include *Off*, *PhsyioKit*, and *enhanced AI*. The *PhysioKit* option provides open-source, reference algorithms for the three blocks. The *enhanced AI* option provides a more advanced AI model for denoising, segmentation, and arrhythmia detection that were generated using Ambiq's HeartKit ADK.
 
-* name: ECG
-* FS: 100 Hz
-* Units: mV
-* Channels:
-  * CH0: Raw ECG signal
-  * CH1: Denoised ECG signal
-* Metrics:
-  * 0- Heart rate
-  * 1- Heart rate variability
-  * 2- Denoise cosine similarity
-  * 3- Arrhythmia classification
-  * 4- Denoise inference per second
-  * 5- Segmentation inference per second
-  * 6- Arrhythmia inference per second
-  * 7- CPU utilization
+The second row consists of the segmented ECG signal tile, denoise error tile, followed by the heart rate (HR) and heart rate variability (HRV) tiles. The segmented ECG signal tile displays the ECG signal with the QRS complex, P-wave, and T-wave segments highlighted. When *PhysioKit* is selected only QRS complexes are highlighted. The denoise error tile displays the cosine similarity between the raw and denoised ECG signals. The HR tile displays the heart rate in beats per minute (BPM) and the HRV tile displays the heart rate variability metrics.
 
-### I/O
+The third row consists of the HRV poincare plot tile, arrhythmia label tile, segmentation pie chart tile, followed by inferences per second tiles for denoising, segmentation, and arrhythmia detection blocks. The HRV poincare plot tile plots the time delta between successive heart beats in a scatter plot. The segmentation pie chart tile displays the percentage of time spent in each segment of the ECG signal. The arrhythmia label tile displays the detected arrhythmia class. The inferences per second tiles display the number of inferences per second for denoising, segmentation, and arrhythmia detection.
 
-* IO0: Input Select, Select, [Cycle, PT1: NSR, PT2: AFIB, PT3: AFL, PT4: BRADY, PT5: GSVT, Live]
-* IO1: BW Noise Level, Slider, [0-100]
-* IO2: MA Noise Level, Slider, [0-100]
-* IO3: EM Noise Level, Slider, [0-100]
-* IO4: Cpu Speed, Select, [96MHz, 192MHz]
-* IO5: Denoise Mode, Select, [Off, DSP, AI]
-* IO6: Segment Mode, Select, [Off, DSP, AI]
-* IO7: Arrhythmia Mode, Select, [Off, DSP, AI]
+The fourth and final row consists of demo description tile, model complexity slides tile, HeartKit QR code tile, and lastly the CPU utilization tile. The model complexity slides tile displays the number of parameters, FLOPs, accuracy, inference time, inference power, and inferences per second per watt efficiency metrics for the denoising, segmentation, and arrhythmia detection models. The CPU utilization tile displays a course-grained view of the CPU utilization.
 
 ## Assets
 
@@ -115,31 +86,20 @@ The application uses TileIO to communicate between the host and the device. The 
 * [**ECG Segmentation Model Configuration**](./assets/seg-4-eff-sm.json)
 * [**Arrhythmia Model Configuration**](./assets/arr-4-eff-sm.json)
 
-## NS Version
+## Tileio Configuration
 
-commit: dbeb9f75
-AS_VERSION="R4.4.1"
-PLATFORM="apollo4p_blue_kxr_evb"
-NESTEGG="rpc_client"
+The application uses Tileio to communicate between the host and the device. The Tileio configuration is as follows:
 
-## Detailed Description
+### Slots
 
-### Input Source
+A single slot is used for the application. The slot is configured with the following parameters:
 
-The demo can either be fed prior subject data or capture live sensor data via the MAX86150. The subjects included exhibit different heart rates, lead locations, and arrhythmia conditions to better demonstrate the AI models' capabilities.
+<img src="./assets/hk-slot-setup.png"
+     style="display:block;float:none;margin-left:auto;margin-right:auto;width:80%;min-width:128px;max-width:1280px">
 
-### Denoising Block
+### I/O
 
-__ECG denoising__ is the process of removing noise caused by several sources such as baseline wander (BW), muscle artifacts (MA), and electrode movement (EM). We can select between a light-weight DSP algorithm provided by PhysioKit or leverage an enhanced AI denoiser model.
+The demo leverages all eight I/O channels. The I/O configuration is as follows:
 
-### Segmentation Block
-
-__ECG segmentation__ is the process of delineating key segments of the ECG signal, including the P-wave, QRS complex, and T-wave. These segments are used to compute a number of clinically relevant metrics, including heart rate, heart rate variability, QRS duration, and QT interval. They are also useful for a variety of downstream tasks such as heartbeat classification and arrhythmia detection.
-
-### Arrhythmia Block
-
-The __ECG arrhythmia__ block is used to detect several irregular heart rhythms including normal sinus, bradycardia, AFIB/AFL, and general supraventricular tachycardia.
-
-### HRV Block
-
-The __HRV block__ is used to identify heart rate as well several heart rate variability metrics. This block leverages the denoised ECG signal along with the segmentation mask.
+<img src="./assets/hk-io-setup.png"
+     style="display:block;float:none;margin-left:auto;margin-right:auto;width:80%;min-width:128px;max-width:1280px">

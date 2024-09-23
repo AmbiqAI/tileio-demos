@@ -12,7 +12,8 @@
         "ringbuffer.h": "c",
         "freertos.h": "c",
         "max86150_addons.h": "c",
-        "arm_math.h": "c"
+        "arm_math.h": "c",
+        "constants.h": "c"
     },
     "makefile.makeDirectory": "./",
     "makefile.launchConfigurations": [

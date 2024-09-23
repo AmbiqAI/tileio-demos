@@ -65,6 +65,7 @@ tio_context_t tioCtx = {
 void flush_pipeline() {
     ringbuffer_flush(&rbEcgSensor);
     ringbuffer_flush(&rbEcgDen);
+    ringbuffer_flush(&rbEcgRawSeg);
     ringbuffer_flush(&rbEcgSeg);
     ringbuffer_flush(&rbEcgMet);
     ringbuffer_flush(&rbEcgMaskMet);
@@ -80,7 +81,7 @@ set_input_source(uint8_t source) {
         appState.inputSource = source;
         sensorCtx.inputSource = source;
         ns_lp_printf("Input Source: %d\n", sensorCtx.inputSource);
-        flush_pipeline();
+        // flush_pipeline();
     }
 }
 
@@ -489,7 +490,8 @@ int main(void) {
     NS_TRY(ecg_arrhythmia_init(&ecgArrModelCtx), "ECG Arrhythmia Init Failed\n");
     NS_TRY(metrics_init(&metricsCfg), "Metrics Init Failed\n");
     sensor_start(&sensorCtx);
-
+    ledstick_set_all_colors(&nsI2cCfg, LEDSTICK_ADDR, 0, 207, 193);
+    ledstick_set_all_brightness(&nsI2cCfg, LEDSTICK_ADDR, 15);
     ns_itm_printf_enable();
     ns_interrupt_master_enable();
 
