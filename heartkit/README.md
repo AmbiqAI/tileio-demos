@@ -18,22 +18,13 @@ flowchart LR
     SEG --> ARR[Arrhythmia Block]
 ```
 
-## Starting from Scratch
-
-Before we can run the demo, the following steps need to be performed:
-
-1. [Compile and flash EVB firmware](#1-compile-and-flash-evb)
-2. [Setup Tileio Dashboard](#2-setup-tileio-dashboard)
-
-Please refer to the top-level [README](../README.md) for detailed instructions on how to clone and install the necessary tools. Once the tools are installed, follow the instructions below to compile and flash the firmware to the EVB.
-
-### Required Hardware
+## Required Hardware
 
 * [Ambiq Apollo4 EVB Platform](#supported-platforms)
 * [MAX86150 ECG/PPG Sensor](https://protocentral.com/product/protocentral-max86150-ppg-and-ecg-breakout-with-qwiic-v2/?cgkit_search_word=max86150)
 * iPad or tablet/PC with Chrome/Edge browser
 
-### Supported Platforms
+## Supported Platforms
 
 The following Ambiq EVBs are currently supported by the demo. Be sure to set the __PLATFORM__ variable to the desired value.
 
@@ -41,7 +32,35 @@ The following Ambiq EVBs are currently supported by the demo. Be sure to set the
 * **apollo4p_blue_kxr_evb** - [Apollo4 Blue Plus KXR SoC Eval Board](https://www.ambiq.top/en/apollo4-blue-plus-kxr-soc-eval-board):
 * **apollo4l_blue_evb** - [Apollo4 Blue Lite SoC, Eval board](https://www.ambiq.top/en/apollo4-blue-lite-soc-eval-board):
 
-### 1. Compile and Flash EVB
+## Starting from Scratch
+
+Before we can run the demo, the following steps need to be performed:
+
+1. [Compile and flash EVB firmware](#1-compile-and-flash-evb-firmware)
+2. [Setup Tileio Dashboard](#2-setup-tileio-dashboard)
+
+### 1. Compile and Flash EVB Firmware
+
+### [OPTION 1] Load existing firmware with J-Link
+
+This option is recommended for users who want to quickly load the existing firmware without compiling the code. The only required tool is the J-Link software, which can be downloaded from the [SEGGER website](https://www.segger.com/downloads/jlink/). The J-Link software includes the JFlashLite tool, which is used to flash the firmware to the EVB.
+
+The firmware binary can be found in the `assets/bin` directory. The firmware binary is named `$PLATFORM.bin` where `$PLATFORM` is the platform name. For example, the firmware binary for the `apollo4p_blue_kxr` platform is `apollo4p_blue_kxr.bin`. Follow the instructions below to flash the firmware to the EVB.
+
+1. Download the firmware binary from the `bin` directory.
+1. Connect the EVB to your computer using a USB-C cable.
+1. Launch JFlashLite tool
+1. Select the following options and press `OK`:
+     * **Target Device**: `AMAP42KK-KBR`
+     * **Target Interface**: `SWD`
+     * **Speed**: `4000 kHz`
+1. Select **Data File** and browse for the downloaded firmware binary.
+1. Set **Prog. Addre** to `0x18000`.
+1. Click `Program Device` to flash the firmware to the EVB.
+
+### [OPTION 2] Compile and flash latest firmware
+
+Please refer to the top-level [README](../README.md) for detailed instructions on how to clone and install the necessary tools. Once the tools are installed, follow the instructions below to compile and flash the firmware to the EVB.
 
 Run the following command to compile the firmware. Be sure to set the `PLATFORM` variable to the desired value from list above.
 
@@ -85,6 +104,7 @@ The fourth and final row consists of demo description tile, model complexity sli
 * [**ECG Denoising Model Configuration**](./assets/den-tcn-sm.json)
 * [**ECG Segmentation Model Configuration**](./assets/seg-4-eff-sm.json)
 * [**Arrhythmia Model Configuration**](./assets/arr-4-eff-sm.json)
+* [**apollo4p_blue_kxr_evb firmware**](./assets/bin/apollo4p_blue_kxr_evb.bin)
 
 ## Tileio Configuration
 
