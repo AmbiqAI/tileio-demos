@@ -160,6 +160,7 @@ extern rb_config_t rbEcgMaskTx;
 
 extern uint8_t LED_COLORS[10][4];
 extern ns_timer_config_t timerCfg;
+extern ns_timer_config_t timer2Cfg;
 extern app_state_t appState;
 
 #endif // __APP_STORE_H

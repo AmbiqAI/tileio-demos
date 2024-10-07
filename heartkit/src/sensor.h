@@ -58,6 +58,16 @@ uint32_t
 sensor_capture_data(sensor_context_t *ctx);
 
 /**
+ * @brief Capture stored data
+ *
+ * @param ctx
+ * @param reqSamples  Number of samples to capture
+ * @return uint32_t
+ */
+uint32_t
+sensor_dummy_data(sensor_context_t *ctx, uint32_t reqSamples);
+
+/**
  * @brief Disable sensor frontend
  *
  * @param ctx Sensor context

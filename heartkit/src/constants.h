@@ -30,6 +30,7 @@ extern "C" {
 #define PTS_ECG_DATA_LEN (4000)
 
 #define SENSOR_RATE (200)
+#define SENSOR_RATE_MS (1000 / SENSOR_RATE)
 #define SENSOR_ECG_SLOT (0)
 #define SENSOR_BUF_LEN (4 * 64) // Double FIFO depth
 #define SENSOR_NOM_REFRESH_LEN (16)

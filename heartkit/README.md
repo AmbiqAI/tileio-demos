@@ -13,18 +13,41 @@ In addition to selecting the input stream, the user is also able to adjust a num
 
 ```mermaid
 flowchart LR
-    INP[Input Selection] --> DEN[Denoising Block]
-    DEN --> SEG[Segment Block]
-    SEG --> ARR[Arrhythmia Block]
+    COLL[1. Collect/Prepocess] --> DEN
+    subgraph Models
+    DEN[2. Denoise] --> SEG
+    SEG[3. Segmentation] --> HRV
+    SEG[3. Segmentation] --> ARR
+    end
+    HRV[4. HRV] --> BLE
+    ARR[4. Rhythm] --> BLE
+    BLE[5. BLE] --> APP
+    APP[6. Tileio App]
 ```
 
-## Required Hardware
+In the first stage, 2 seconds of sensor data is collected- either from stored subject data or directly from the MAX86150 sensor. In stage 2, the ECG data is denoised and in stage 3 is segmented. In stage 4, the cleaned, segmented data is fed into the upstream blocks to compute HRV metrics along with arrhythmia detection using 10 seconds of data. Finally, in stage 5, the ECG data and metrics are streamed over BLE/USB to Tileio App to be displayed in a dashboard.
+
+## Architecture
+
+The HeartKit demo leverages a multi-head network- a backbone denoising and segmentation model followed by 2 upstream heads:
+
+* [__Denoising model__](./assets/den-tcn-sm.json) utilizes a small 1-D TCN architecture to remove noise from the ECG signal.
+* [__Segmentation model__](./assets/seg-4-tcn-sm.json) utilizes a small 1-D TCN architecture to perform ECG segmentation.
+* [__Rhythm head__](./assets/arr-4-eff-sm.json) utilizes a 1-D MBConv CNN to detect 4-class arrhythmias.
+* __HRV head__ utilizes segmentation results to derive a number of useful metrics including heart rate and heart rate variability (HRV).
+
+## Demo Setup
+
+### Contents
 
 * [Ambiq Apollo4 EVB Platform](#supported-platforms)
 * [MAX86150 ECG/PPG Sensor](https://protocentral.com/product/protocentral-max86150-ppg-and-ecg-breakout-with-qwiic-v2/?cgkit_search_word=max86150)
 * iPad or tablet/PC with Chrome/Edge browser
+* 2x USB-C cables
+* 1x Qwiic cable
+* 1x USB-C battery pack for EVB (optional)
 
-## Supported Platforms
+### Supported Platforms
 
 The following Ambiq EVBs are currently supported by the demo. Be sure to set the __PLATFORM__ variable to the desired value.
 

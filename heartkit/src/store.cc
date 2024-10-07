@@ -64,6 +64,12 @@ ns_timer_config_t timerCfg = {
     .enableInterrupt = false
 };
 
+ns_timer_config_t timer2Cfg = {
+    .api = &ns_timer_V1_0_0,
+    .timer = NS_TIMER_INTERRUPT,
+    .enableInterrupt = false
+};
+
 
 ///////////////////////////////////////////////////////////////////////////////
 // Sensor Configuration

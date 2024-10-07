@@ -33,12 +33,6 @@ sensor_is_valid(sensor_context_t *ctx) {
 
 uint32_t
 sensor_init(sensor_context_t *ctx) {
-    ns_lp_printf("Initializing sensor\n");
-    // if (sensor_is_valid(ctx) == 0) {
-    //     ctx->initialized = false;
-
-    //     return 1;
-    // }
     max86150_powerup(ctx->maxCtx);
     ns_delay_us(RESET_DELAY_US);
     max86150_reset(ctx->maxCtx);
@@ -69,12 +63,22 @@ void
 sensor_start(sensor_context_t *ctx) {
     // max86150_powerup(&maxCtx);
     max86150_set_fifo_enable(ctx->maxCtx, 1);
+    sensor_is_valid(ctx);
 }
 
 void
 sensor_stop(sensor_context_t *ctx) {
     max86150_set_fifo_enable(ctx->maxCtx, 0);
     // max86150_shutdown(&maxCtx);
+}
+
+void
+sensor_restart(sensor_context_t *ctx) {
+    ns_delay_us(200000);
+    max86150_shutdown(ctx->maxCtx);
+    sensor_init(ctx);
+    ns_delay_us(200000);
+    sensor_start(ctx);
 }
 
 
@@ -111,14 +115,12 @@ sensor_dummy_data(sensor_context_t *ctx, uint32_t reqSamples) {
 uint32_t
 sensor_capture_data(sensor_context_t *ctx) {
     uint32_t numSamples;
+    uint32_t err = 0;
     numSamples = SENSOR_NOM_REFRESH_LEN;
     if (!ctx->initialized || sensor_is_valid(ctx) == 0){
-        sensor_init(ctx);
+        sensor_restart(ctx);
         return 0;
     }
     numSamples = max86150_read_fifo_samples(ctx->maxCtx, ctx->buffer, ctx->maxCfg->fifoSlotConfigs, ctx->maxCfg->numSlots);
-    if (ctx->inputSource < NUM_INPUT_PTS) {
-        return sensor_dummy_data(ctx, numSamples);
-    }
     return numSamples;
 }

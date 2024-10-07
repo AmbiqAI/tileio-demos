@@ -228,17 +228,16 @@ void received_uio_state(const uint8_t *data, uint32_t length) {
 ////////////////////////////////////////////////////////////////
 
 /**
- * @brief Capture sensor data
+ * @brief Extract sensor data
  *
  * @return uint32_t
  */
 uint32_t
-capture_sensor() {
+extract_sensor_data(size_t numSamples) {
     int32_t val;
-    size_t numSamples;
+
     float32_t val_f32;
     size_t idx;
-    numSamples = sensor_capture_data(&sensorCtx);
     for (size_t i = 0; i < numSamples; i++) {
         for (size_t j = 0; j < sensorCtx.maxCfg->numSlots; j++) {
             idx = sensorCtx.maxCfg->numSlots * i + j;
@@ -253,11 +252,11 @@ capture_sensor() {
             } else if (sensorCtx.maxCfg->fifoSlotConfigs[j] == Max86150SlotPpgLed1) {
                 val = sensorCtx.buffer[idx];
                 val_f32 = val;
-                // ringbuffer_push(&rbEcgSensor, &val_f32, 1);
+                // ringbuffer_push(&rbPpg1Led2Sensor, &val_f32, 1);
             } else if (sensorCtx.maxCfg->fifoSlotConfigs[j] == Max86150SlotPpgLed2) {
                 val = sensorCtx.buffer[idx];
                 // val_f32 = val;
-                // ringbuffer_push(&rbPpgLed2Sensor, &val_f32, 1);
+                // ringbuffer_push(&rbPpg2Led2Sensor, &val_f32, 1);
             }
         }
     }
@@ -268,7 +267,7 @@ capture_sensor() {
  * @brief Preprocess sensor data
  *
  */
-void preprocess() {
+void preprocess_sensor_data() {
     size_t numSamples;
     // Downsample sensor data to slots
     numSamples = ringbuffer_len(&rbEcgSensor);
@@ -279,15 +278,25 @@ void preprocess() {
 }
 
 void SensorTask(void *pvParameters) {
-    size_t numSamples;
+    size_t numSamples, reqSamples;
+    uint32_t remUs = 0, tickUs = 0;
+    ns_timer_clear(&timer2Cfg);
     while (true) {
-        numSamples = capture_sensor();
-        preprocess();
+        vTaskDelay(pdMS_TO_TICKS(80)); // Delay for 16 samples (200Hz)
+        tickUs = ns_us_ticker_read(&timer2Cfg) + remUs;
+        ns_timer_clear(&timer2Cfg);
+        if (sensorCtx.inputSource < NUM_INPUT_PTS) {
+            reqSamples = MIN(tickUs/1000/SENSOR_RATE_MS, 32),
+            remUs = tickUs - 1000*reqSamples*SENSOR_RATE_MS;
+            numSamples = sensor_dummy_data(&sensorCtx, reqSamples);
+        } else {
+            numSamples = sensor_capture_data(&sensorCtx);
+        }
+        extract_sensor_data(numSamples);
+        preprocess_sensor_data();
         if (numSamples >= 30) {
             ns_lp_printf("<SENSOR %d >\n", numSamples);
         }
-        // Delay for 16 samples (200Hz)
-        vTaskDelay(pdMS_TO_TICKS(80));
     }
 }
 
@@ -460,8 +469,8 @@ void ProcessTask(void *pvParameters) {
 void setup_task(void *pvParameters) {
     tio_start(&tioCtx);
     xTaskCreate(TioTask, "TioTask", 512, NULL, 3, &tioTaskHandle);
-    xTaskCreate(SensorTask, "SensorTask", 256, 0, 3, &sensorTaskHandle);
-    xTaskCreate(ProcessTask, "ProcessTask", 2816, 0, 1, &processTaskHandle);
+    xTaskCreate(SensorTask, "SensorTask", 512, 0, 3, &sensorTaskHandle);
+    xTaskCreate(ProcessTask, "ProcessTask", 3072, 0, 1, &processTaskHandle);
     send_uio_state();
     vTaskSuspend(NULL);
     while (1) { };
@@ -478,6 +487,7 @@ int main(void) {
     NS_TRY(ns_power_config(&nsPwrCfg), "Power Init Failed\n");
     NS_TRY(ns_i2c_interface_init(&nsI2cCfg, I2C_SPEED_HZ), "I2C Init Failed\n");
     NS_TRY(ns_timer_init(&timerCfg), "Timer Init failed.\n");
+    NS_TRY(ns_timer_init(&timer2Cfg), "Timer 2 Init failed.\n");
     NS_TRY(ns_peripheral_button_init(&nsBtnCfg), "Button Init failed.\n");
     am_devices_led_array_init(am_bsp_psLEDs, AM_BSP_NUM_LEDS);
     am_devices_led_array_out(am_bsp_psLEDs, AM_BSP_NUM_LEDS, 0);
